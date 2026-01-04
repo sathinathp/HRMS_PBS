@@ -82,6 +82,7 @@ gh secret set STAGING_DB_PORT --repo $REPO --body "5432"
 # === Domain and Security ===
 Write-Host "🔒 Setting Domain and Security Configuration..." -ForegroundColor Cyan
 gh secret set STAGING_ALLOWED_HOSTS --repo $REPO --body $envVars['ALLOWED_HOSTS']
+gh secret set STAGING_CSRF_TRUSTED_ORIGINS --repo $REPO --body "http://138.128.242.42,https://petabytzglobal.com,https://www.petabytzglobal.com"
 
 # === CORS Configuration ===
 Write-Host "🌐 Setting CORS Configuration..." -ForegroundColor Cyan
@@ -94,9 +95,9 @@ gh secret set STAGING_EMAIL_HOST --repo $REPO --body "smtp.gmail.com"
 gh secret set STAGING_EMAIL_PORT --repo $REPO --body "587"
 gh secret set STAGING_EMAIL_USE_TLS --repo $REPO --body "True"
 gh secret set STAGING_EMAIL_USE_SSL --repo $REPO --body "False"
-gh secret set STAGING_EMAIL_HOST_USER --repo $REPO --body "oppora.ai1@gmail.com"
-gh secret set STAGING_EMAIL_HOST_PASSWORD --repo $REPO --body "iqtzgwxtqzqkpwmr"
-gh secret set STAGING_DEFAULT_FROM_EMAIL --repo $REPO --body "oppora.ai1@gmail.com"
+gh secret set STAGING_EMAIL_HOST_USER --repo $REPO --body "hrms@petabytz.com"
+gh secret set STAGING_EMAIL_HOST_PASSWORD --repo $REPO --body "Rminds@0007"
+gh secret set STAGING_DEFAULT_FROM_EMAIL --repo $REPO --body "HRMS <hrms@petabytz.com>"
 
 # === Static and Media Files ===
 Write-Host "📁 Setting Static and Media Files Configuration..." -ForegroundColor Cyan
