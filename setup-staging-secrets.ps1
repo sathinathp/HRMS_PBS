@@ -82,6 +82,13 @@ gh secret set STAGING_EMAIL_HOST_USER --repo $REPO --body "oppora.ai1@gmail.com"
 gh secret set STAGING_EMAIL_HOST_PASSWORD --repo $REPO --body "iqtzgwxtqzqkpwmr"
 gh secret set STAGING_DEFAULT_FROM_EMAIL --repo $REPO --body "oppora.ai1@gmail.com"
 
+# === Static and Media Files ===
+Write-Host "📁 Setting Static and Media Files Configuration..." -ForegroundColor Cyan
+gh secret set STAGING_STATIC_URL --repo $REPO --body "/static/"
+gh secret set STAGING_STATIC_ROOT --repo $REPO --body "/app/staticfiles"
+gh secret set STAGING_MEDIA_URL --repo $REPO --body "/media/"
+gh secret set STAGING_MEDIA_ROOT --repo $REPO --body "/app/media"
+
 Write-Host ""
 Write-Host "✅ All secrets have been configured!" -ForegroundColor Green
 Write-Host ""
