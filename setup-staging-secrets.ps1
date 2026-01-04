@@ -27,6 +27,24 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "✅ GitHub CLI authenticated" -ForegroundColor Green
 Write-Host ""
 
+# Load environment variables from .env.staging
+$envFile = Join-Path $PSScriptRoot ".env.staging"
+if (-not (Test-Path $envFile)) {
+    Write-Host "❌ .env.staging file not found at: $envFile" -ForegroundColor Red
+    exit 1
+}
+
+# Parse .env.staging file
+$envVars = @{}
+Get-Content $envFile | Where-Object { $_ -match '^\s*[^#]' } | ForEach-Object {
+    $line = $_.Trim()
+    if ($line -match '^([^=]+)=(.*)$') {
+        $key = $matches[1]
+        $value = $matches[2]
+        $envVars[$key] = $value
+    }
+}
+
 # === SSH Configuration ===
 Write-Host "📡 Setting SSH Configuration..." -ForegroundColor Cyan
 gh secret set STAGING_SSH_HOST --repo $REPO --body "138.128.242.42"
@@ -36,15 +54,13 @@ gh secret set STAGING_SSH_PORT --repo $REPO --body "22"
 gh secret set STAGING_DEPLOY_PATH --repo $REPO --body "/var/www/hrms-pbs-staging"
 gh secret set STAGING_BACKUP_PATH --repo $REPO --body "/var/www/hrms-pbs-staging-backups"
 
-# === MS Teams Notifications (Optional) ===
+# === MS Teams Notifications ===
 Write-Host "📢 Setting Notifications..." -ForegroundColor Cyan
-Write-Host "⚠️ STAGING_TEAMS_WEBHOOK_URL - Optional: MS Teams webhook for deployment notifications" -ForegroundColor Yellow
-$teamsWebhook = Read-Host "Enter MS Teams Webhook URL (or press Enter to skip)"
-if ($teamsWebhook) {
-    gh secret set STAGING_TEAMS_WEBHOOK_URL --repo $REPO --body $teamsWebhook
+if ($envVars['STAGING_TEAMS_WEBHOOK_URL']) {
+    gh secret set STAGING_TEAMS_WEBHOOK_URL --repo $REPO --body $envVars['STAGING_TEAMS_WEBHOOK_URL']
     Write-Host "✅ MS Teams webhook configured" -ForegroundColor Green
 } else {
-    Write-Host "ℹ️ Skipping MS Teams webhook" -ForegroundColor Gray
+    Write-Host "⚠️ STAGING_TEAMS_WEBHOOK_URL not found in .env.staging - skipping" -ForegroundColor Yellow
 }
 
 # === Django Configuration ===
