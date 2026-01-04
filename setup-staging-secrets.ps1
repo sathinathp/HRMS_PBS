@@ -36,6 +36,17 @@ gh secret set STAGING_SSH_PORT --repo $REPO --body "22"
 gh secret set STAGING_DEPLOY_PATH --repo $REPO --body "/var/www/hrms-pbs-staging"
 gh secret set STAGING_BACKUP_PATH --repo $REPO --body "/var/www/hrms-pbs-staging-backups"
 
+# === MS Teams Notifications (Optional) ===
+Write-Host "📢 Setting Notifications..." -ForegroundColor Cyan
+Write-Host "⚠️ STAGING_TEAMS_WEBHOOK_URL - Optional: MS Teams webhook for deployment notifications" -ForegroundColor Yellow
+$teamsWebhook = Read-Host "Enter MS Teams Webhook URL (or press Enter to skip)"
+if ($teamsWebhook) {
+    gh secret set STAGING_TEAMS_WEBHOOK_URL --repo $REPO --body $teamsWebhook
+    Write-Host "✅ MS Teams webhook configured" -ForegroundColor Green
+} else {
+    Write-Host "ℹ️ Skipping MS Teams webhook" -ForegroundColor Gray
+}
+
 # === Django Configuration ===
 Write-Host "🐍 Setting Django Configuration..." -ForegroundColor Cyan
 gh secret set STAGING_DEBUG --repo $REPO --body "False"
