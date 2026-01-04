@@ -81,7 +81,7 @@ gh secret set STAGING_DB_PORT --repo $REPO --body "5432"
 
 # === Domain and Security ===
 Write-Host "🔒 Setting Domain and Security Configuration..." -ForegroundColor Cyan
-gh secret set STAGING_ALLOWED_HOSTS --repo $REPO --body "138.128.242.42,localhost,127.0.0.1"
+gh secret set STAGING_ALLOWED_HOSTS --repo $REPO --body $envVars['ALLOWED_HOSTS']
 
 # === CORS Configuration ===
 Write-Host "🌐 Setting CORS Configuration..." -ForegroundColor Cyan
