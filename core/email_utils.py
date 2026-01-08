@@ -300,7 +300,7 @@ def send_anniversary_announcement(employee, years, company_employees):
 
 def send_probation_completion_email(employee):
     """
-    Send probation completion email to an employee using company-specific email
+    Send probation completion email to an employee using hrms@petabytz.com
     Sent when employee completes 3 months from joining date
     
     Args:
@@ -315,15 +315,11 @@ def send_probation_completion_email(employee):
             logger.warning(f"Employee {employee.user.get_full_name()} has no email address")
             return False
         
-        # Get company-specific email connection
-        connection = get_company_email_connection(employee.company)
+        # MANDATORY: Use hrms@petabytz.com for all probation emails
+        from_email = 'Petabytz HR <hrms@petabytz.com>'
         
-        # Determine from email
-        if employee.company.hr_email:
-            from_name = employee.company.hr_email_name or f"{employee.company.name} HR"
-            from_email = f'{from_name} <{employee.company.hr_email}>'
-        else:
-            from_email = settings.DEFAULT_FROM_EMAIL
+        # Get connection
+        connection = get_hr_email_connection()
         
         # Prepare context for email template
         context = {
@@ -543,6 +539,7 @@ def send_regularization_request_notification(regularization_request):
 def send_welcome_email_with_link(employee, domain):
     """
     Send welcome email with activation/password reset link
+    MANDATORY: Always sends from hrms@petabytz.com for all companies
     
     Args:
         employee: Employee model instance
@@ -557,15 +554,11 @@ def send_welcome_email_with_link(employee, domain):
             logger.warning(f"Employee {user.get_full_name()} has no email address")
             return False
             
-        # Get company-specific email connection
-        connection = get_company_email_connection(employee.company)
+        # MANDATORY: Use hrms@petabytz.com for all welcome emails
+        from_email = 'Petabytz HR <hrms@petabytz.com>'
         
-        # Determine from email
-        if employee.company.hr_email:
-            from_name = employee.company.hr_email_name or f"{employee.company.name} HR"
-            from_email = f'{from_name} <{employee.company.hr_email}>'
-        else:
-            from_email = settings.DEFAULT_FROM_EMAIL
+        # Get standardized connection
+        connection = get_hr_email_connection()
             
         # Generate Reset Link
         from django.contrib.auth.tokens import default_token_generator
@@ -609,7 +602,7 @@ def send_welcome_email_with_link(employee, domain):
         email.attach_alternative(html_content, "text/html")
         email.send()
         
-        logger.info(f"Welcome email sent to {user.email}")
+        logger.info(f"Welcome email sent to {user.email} from {from_email}")
         return True
 
     except Exception as e:

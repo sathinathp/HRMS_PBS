@@ -51,12 +51,20 @@ def send_activation_email(user, request=None):
         # Create text fallback
         text_content = strip_tags(html_content)
 
+        # MANDATORY: Use hrms@petabytz.com for all activation emails
+        from_email = 'Petabytz HR <hrms@petabytz.com>'
+        
+        # Get standardized connection
+        from core.email_utils import get_hr_email_connection
+        connection = get_hr_email_connection()
+
         # Create email object
         email = EmailMultiAlternatives(
             subject=subject,
             body=text_content,
-            from_email=settings.EMAIL_HOST_USER or settings.DEFAULT_FROM_EMAIL,
+            from_email=from_email,
             to=[user.email],
+            connection=connection
         )
         email.attach_alternative(html_content, "text/html")
         email.send(fail_silently=False)

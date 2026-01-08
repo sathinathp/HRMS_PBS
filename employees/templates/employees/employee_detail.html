@@ -437,7 +437,13 @@
                                         <i class="fas fa-map-marked-alt me-1"></i> View Map
                                     </button>
                                 </td>
-                                <td>{{ att.gross_hours|default:"-" }}</td>
+                                <td>
+                                    {{ att.effective_hours|default:"-" }}
+                                    {% if not att.clock_out and att.clock_in %}
+                                    <span class="badge bg-success-soft text-success ms-1"
+                                        style="font-size: 0.6em;">Active</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% empty %}
                             <tr>
@@ -621,9 +627,15 @@
         // Draw Path Line
         if (latlngs.length > 1) {
             L.polyline(latlngs, { color: '#4f46e5', weight: 4, opacity: 0.7, dashArray: '10, 10' }).addTo(pathLayer);
-            map.fitBounds(latlngs, { padding: [50, 50] });
+            setTimeout(() => {
+                map.invalidateSize();
+                map.fitBounds(latlngs, { padding: [50, 50] });
+            }, 100);
         } else if (latlngs.length === 1) {
-            map.setView(latlngs[0], 15);
+            setTimeout(() => {
+                map.invalidateSize();
+                map.setView(latlngs[0], 15);
+            }, 100);
         }
     }
 

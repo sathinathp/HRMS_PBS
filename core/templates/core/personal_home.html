@@ -957,8 +957,8 @@
                                 </h4>
                                 <div class="opacity-75 small fw-medium">
                                     {% if assigned_shift %}
-                                    {{ assigned_shift.start_time|time:"h:i A" }} - {{ assigned_shift.end_time|time:"h:i
-                                    A" }}
+                                    {{ assigned_shift.start_time|time:"h:i A" }} -
+                                    {{ assigned_shift.end_time|time:"h:i A" }}
                                     {% else %}
                                     09:00 AM - 06:00 PM
                                     {% endif %}
@@ -1286,6 +1286,7 @@
             if (ov) {
                 ov.style.display = 'flex';
                 ov.offsetHeight;
+                ov.style.opacity = '1';
                 ov.style.opacity = '1';
                 confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
             }

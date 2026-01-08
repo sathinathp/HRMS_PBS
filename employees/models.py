@@ -364,12 +364,15 @@ class Attendance(models.Model):
 
     @property
     def effective_hours(self):
-        if self.clock_in and self.clock_out:
-            diff = self.clock_out - self.clock_in
+        from django.utils import timezone
+        if self.clock_in:
+            # Use current time if active, otherwise clock_out time
+            end_time = self.clock_out if self.clock_out else timezone.now()
+            diff = end_time - self.clock_in
             total_seconds = diff.total_seconds()
             hours = int(total_seconds // 3600)
             minutes = int((total_seconds % 3600) // 60)
-            return f"{hours}:{minutes:02d}"
+            return f"{hours}:{minutes:02d}{'+' if not self.clock_out else ''}"
         return "0:00"
 
     @property
