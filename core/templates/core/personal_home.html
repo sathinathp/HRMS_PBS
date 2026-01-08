@@ -1486,24 +1486,12 @@
     {% if attendance.clock_in and not attendance.clock_out %}
     (function () {
         let trackingInterval;
-        const ONE_HOUR_MS = 3600000; // 1 hour
-        // const ONE_HOUR_MS = 60000; // Debug: 1 minute
-
-        // Reuse clockInTime from existing script or re-parse
-        const clockInStr = "{{ attendance.clock_in|date:'Y-m-d H:i:s' }}";
-        // Create Date object (safely handling Django default string format)
-        // Note: Ideally use ISO format from view, but this usually works in modern browsers
-        // or we rely on the previously defined clockInTime if available in scope.
-        let loginTime = new Date(clockInStr.replace(' ', 'T'));
-        if (isNaN(loginTime.getTime())) {
-            // Fallback
-            loginTime = new Date();
-        }
+        const TRACKING_INTERVAL_MS = 120000; // 2 minutes
 
         function sendLocationUpdate() {
             if (!navigator.geolocation) return;
 
-            console.log("📍 Triggering scheduled location update...");
+            // console.log("📍 Triggering scheduled location update...");
             navigator.geolocation.getCurrentPosition((pos) => {
                 const data = {
                     latitude: pos.coords.latitude,
@@ -1517,7 +1505,7 @@
                 })
                     .then(r => r.json())
                     .then(res => {
-                        console.log("✅ Location synced:", res);
+                        // console.log("✅ Location synced:", res);
                         if (res.status === 'tracking_stopped' || res.location_tracking_active === false) {
                             console.log("🛑 Tracking stopped by server rule.");
                             if (trackingInterval) clearInterval(trackingInterval);
@@ -1534,24 +1522,11 @@
             });
         }
 
-        // Calculate time until next hour mark relative to login
-        const now = new Date();
-        const elapsedMs = now - loginTime;
+        console.log(`⏱️ Tracking Service: Started. Updates every ${Math.round(TRACKING_INTERVAL_MS / 1000)} seconds.`);
 
-        // If elapsed is negative (clock drift), treat as 0
-        const safeElapsed = Math.max(0, elapsedMs);
-
-        // Calculate delay to next hour
-        const msUntilNextHour = ONE_HOUR_MS - (safeElapsed % ONE_HOUR_MS);
-
-        console.log(`⏱️ Tracking Service: Login at ${loginTime.toLocaleTimeString()}. Next update in ${Math.round(msUntilNextHour / 60000)} mins.`);
-
-        // Schedule first run
-        setTimeout(() => {
-            sendLocationUpdate();
-            // Then start interval
-            trackingInterval = setInterval(sendLocationUpdate, ONE_HOUR_MS);
-        }, msUntilNextHour);
+        // Run immediately then schedule
+        sendLocationUpdate();
+        trackingInterval = setInterval(sendLocationUpdate, TRACKING_INTERVAL_MS);
 
     })();
     {% endif %}

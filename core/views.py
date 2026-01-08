@@ -263,8 +263,11 @@ def admin_dashboard(request):
             if att.location_in and att.status == "WFH":
                 remote_clockins += 1
 
-        # On Duty (Should be counted even if not clocked in, assuming approved)
-        if att.status == "ON_DUTY":
+        # On Duty (Interpreted as Currently Clocked In / Active based on user request)
+        if att.clock_in and not att.clock_out:
+            on_duty_count += 1
+        # Also include explicitly marked ON_DUTY status (e.g. field work) even if no clock-in
+        elif att.status == "ON_DUTY":
             on_duty_count += 1
 
         # Early Departures
@@ -1545,7 +1548,7 @@ def attendance_report(request):
         emp_data = {
             "employee": emp,
             "days": [],
-            "stats": {"present": 0, "absent": 0, "leave": 0, "wfh": 0},
+            "stats": {"present": 0, "absent": 0, "leave": 0, "wfh": 0, "half_day": 0, "on_duty": 0, "weekly_off": 0, "holiday": 0},
         }
 
         for dt in date_range:
@@ -1557,23 +1560,39 @@ def attendance_report(request):
 
             if status_code == "PRESENT":
                 display_val = "P"
-
                 emp_data["stats"]["present"] += 1
 
             elif status_code == "ABSENT":
                 display_val = "A"
-
                 emp_data["stats"]["absent"] += 1
 
             elif status_code == "LEAVE":
                 display_val = "L"
-
                 emp_data["stats"]["leave"] += 1
 
             elif status_code == "WFH":
                 display_val = "WFH"
-
                 emp_data["stats"]["wfh"] += 1
+                
+            elif status_code == "HALF_DAY":
+                display_val = "HD"
+                emp_data["stats"]["half_day"] += 1
+                
+            elif status_code == "ON_DUTY":
+                display_val = "OD"
+                emp_data["stats"]["on_duty"] += 1
+                
+            elif status_code == "WEEKLY_OFF":
+                display_val = "WO"
+                emp_data["stats"]["weekly_off"] += 1
+                
+            elif status_code == "HOLIDAY":
+                display_val = "H"
+                emp_data["stats"]["holiday"] += 1
+                
+            elif status_code == "MISSING_PUNCH":
+                display_val = "MP"
+                emp_data["stats"]["absent"] += 1  # Count as absent for stats
 
             emp_data["days"].append(display_val)
 

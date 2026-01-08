@@ -91,6 +91,36 @@
         background-color: #faf5ff;
     }
 
+    .status-hd {
+        color: #d69e2e;
+        font-weight: bold;
+        background-color: #fefcbf;
+    }
+
+    .status-od {
+        color: #3182ce;
+        font-weight: bold;
+        background-color: #ebf8ff;
+    }
+
+    .status-wo {
+        color: #718096;
+        font-weight: bold;
+        background-color: #f7fafc;
+    }
+
+    .status-h {
+        color: #38b2ac;
+        font-weight: bold;
+        background-color: #e6fffa;
+    }
+
+    .status-mp {
+        color: #c53030;
+        font-weight: bold;
+        background-color: #fed7d7;
+    }
+
     .action-bar {
         background-color: #fff;
         padding: 16px;
@@ -191,7 +221,7 @@
 
                         {% for status in item.days %}
                         <td
-                            class="{% if status  ==  'P' %}status-p{% elif status  ==  'A' %}status-a{% elif status  ==  'L' %}status-l{% elif status  ==  'WFH' %}status-wfh{% endif %}">
+                            class="{% if status == 'P' %}status-p{% elif status == 'A' %}status-a{% elif status == 'L' %}status-l{% elif status == 'WFH' %}status-wfh{% elif status == 'HD' %}status-hd{% elif status == 'OD' %}status-od{% elif status == 'WO' %}status-wo{% elif status == 'H' %}status-h{% elif status == 'MP' %}status-mp{% endif %}">
                             {{ status }}
                         </td>
                         {% endfor %}

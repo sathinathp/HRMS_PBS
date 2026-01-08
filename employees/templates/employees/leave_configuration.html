@@ -128,8 +128,9 @@
         border-radius: var(--radius-md);
         padding: 1rem 1.5rem;
         display: grid;
-        grid-template-columns: 2.5fr 1.5fr 2fr 2fr 1fr;
+        grid-template-columns: 2fr 1.2fr 2.5fr 2.5fr 0.8fr;
         align-items: center;
+        gap: 1rem;
         box-shadow: var(--shadow-soft);
         border: 1px solid transparent;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -146,13 +147,46 @@
     /* Column Styles */
     .col-header {
         display: grid;
-        grid-template-columns: 2.5fr 1.5fr 2fr 2fr 1fr;
+        grid-template-columns: 2fr 1.2fr 2.5fr 2.5fr 0.8fr;
         padding: 0 1.5rem 1rem;
+        gap: 1rem;
         font-size: 0.75rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: var(--text-muted);
         font-weight: 700;
+    }
+
+    /* Leave Stats Box */
+    .leave-stats-box {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .leave-stat-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.85rem;
+    }
+
+    .leave-stat-label {
+        color: var(--text-muted);
+        font-size: 0.75rem;
+    }
+
+    .leave-stat-value {
+        font-weight: 700;
+        color: var(--text-main);
+    }
+
+    .leave-stat-value.used {
+        color: #dc2626;
+    }
+
+    .leave-stat-value.balance {
+        color: #16a34a;
     }
 
     /* User Profile */
@@ -360,8 +394,8 @@
     <div class="col-header">
         <div>Employee</div>
         <div>Role</div>
-        <div>Sick Leave (Allocated)</div>
-        <div>Casual Leave (Allocated)</div>
+        <div>Sick Leave</div>
+        <div>Casual Leave</div>
         <div class="text-center">Save</div>
     </div>
 
@@ -389,23 +423,49 @@
                 <span class="badge-dept">{{ employee.designation|default:"--"}}</span>
             </div>
 
-            <!-- Sick Leave Control -->
-            <div>
-                <div class="control-wrapper">
-                    <button class="control-btn" onclick="modifyVal('sick_val_{{ employee.id }}', -0.5)">-</button>
-                    <input type="number" id="sick_val_{{ employee.id }}" class="control-input"
-                        value="{{ employee.leave_balance.sick_leave_allocated }}" step="0.5">
-                    <button class="control-btn" onclick="modifyVal('sick_val_{{ employee.id }}', 0.5)">+</button>
+            <!-- Sick Leave Stats & Control -->
+            <div class="leave-stats-box">
+                <div class="leave-stat-row">
+                    <span class="leave-stat-label">Allocated:</span>
+                    <div class="control-wrapper">
+                        <button class="control-btn" onclick="modifyVal('sick_val_{{ employee.id }}', -0.5)">-</button>
+                        <input type="number" id="sick_val_{{ employee.id }}" class="control-input"
+                            value="{{ employee.leave_balance.sick_leave_allocated }}" step="0.5">
+                        <button class="control-btn" onclick="modifyVal('sick_val_{{ employee.id }}', 0.5)">+</button>
+                    </div>
+                </div>
+                <div class="leave-stat-row">
+                    <span class="leave-stat-label">Used:</span>
+                    <span class="leave-stat-value used">{{ employee.leave_balance.sick_leave_used|floatformat:1
+                        }}</span>
+                </div>
+                <div class="leave-stat-row">
+                    <span class="leave-stat-label">Balance:</span>
+                    <span class="leave-stat-value balance">{{ employee.leave_balance.sick_leave_balance|floatformat:1
+                        }}</span>
                 </div>
             </div>
 
-            <!-- Casual Leave Control -->
-            <div>
-                <div class="control-wrapper">
-                    <button class="control-btn" onclick="modifyVal('casual_val_{{ employee.id }}', -0.5)">-</button>
-                    <input type="number" id="casual_val_{{ employee.id }}" class="control-input"
-                        value="{{ employee.leave_balance.casual_leave_allocated }}" step="0.5">
-                    <button class="control-btn" onclick="modifyVal('casual_val_{{ employee.id }}', 0.5)">+</button>
+            <!-- Casual Leave Stats & Control -->
+            <div class="leave-stats-box">
+                <div class="leave-stat-row">
+                    <span class="leave-stat-label">Allocated:</span>
+                    <div class="control-wrapper">
+                        <button class="control-btn" onclick="modifyVal('casual_val_{{ employee.id }}', -0.5)">-</button>
+                        <input type="number" id="casual_val_{{ employee.id }}" class="control-input"
+                            value="{{ employee.leave_balance.casual_leave_allocated }}" step="0.5">
+                        <button class="control-btn" onclick="modifyVal('casual_val_{{ employee.id }}', 0.5)">+</button>
+                    </div>
+                </div>
+                <div class="leave-stat-row">
+                    <span class="leave-stat-label">Used:</span>
+                    <span class="leave-stat-value used">{{ employee.leave_balance.casual_leave_used|floatformat:1
+                        }}</span>
+                </div>
+                <div class="leave-stat-row">
+                    <span class="leave-stat-label">Balance:</span>
+                    <span class="leave-stat-value balance">{{ employee.leave_balance.casual_leave_balance|floatformat:1
+                        }}</span>
                 </div>
             </div>
 
