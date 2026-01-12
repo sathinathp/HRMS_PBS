@@ -651,6 +651,15 @@ class Attendance(models.Model):
 
         return False
 
+    def get_current_session(self):
+        """Get the currently active session for this attendance record"""
+        return AttendanceSession.objects.filter(
+            employee=self.employee,
+            date=self.date,
+            clock_out__isnull=True,
+            is_active=True,
+        ).order_by("-session_number").first()
+
 
 class AttendanceSession(models.Model):
     """Individual clock-in/clock-out sessions within a day"""
