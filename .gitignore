@@ -19,6 +19,11 @@ staticfiles/
 static_root/
 *.pot
 
+# Logs
+_logs/
+logs/
+*.log
+
 # Environment
 .env
 .env.*
@@ -64,3 +69,7 @@ desktop.ini
 *.log
 logs/
 sent_emails/
+
+# Markdown files in root (except README)
+/*.md
+!README.md
