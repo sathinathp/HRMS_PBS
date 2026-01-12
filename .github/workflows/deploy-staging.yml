@@ -22,9 +22,12 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies for migration check
+      - name: Install uv for fast dependency installation
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
         run: |
-          pip install django psycopg2-binary python-dotenv pytz
+          uv pip install --system -e . --no-cache
 
       - name: Check models are in sync with migrations
         env:
@@ -32,6 +35,7 @@ jobs:
           DEBUG: 'False'
           DB_ENGINE: 'django.db.backends.sqlite3'
           DB_NAME: ':memory:'
+          ALLOWED_HOSTS: 'localhost'
         run: |
           echo "🔍 Checking if models are in sync with migrations..."
           
