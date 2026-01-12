@@ -10,7 +10,47 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Pre-deployment validation job
+  validate-migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies for migration check
+        run: |
+          pip install django psycopg2-binary python-dotenv pytz
+
+      - name: Check models are in sync with migrations
+        env:
+          SECRET_KEY: 'temp-key-for-migration-check'
+          DEBUG: 'False'
+          DB_ENGINE: 'django.db.backends.sqlite3'
+          DB_NAME: ':memory:'
+        run: |
+          echo "🔍 Checking if models are in sync with migrations..."
+          
+          # Check if there are any model changes that need new migrations
+          if python manage.py makemigrations --check --dry-run 2>&1; then
+            echo "✅ All models are in sync with migrations"
+          else
+            echo ""
+            echo "❌ ERROR: Models are out of sync with migrations!"
+            echo ""
+            echo "The following changes were detected that require new migrations:"
+            python manage.py makemigrations --dry-run 2>&1 || true
+            echo ""
+            echo "Please run 'python manage.py makemigrations' locally, commit the new migration files, and push again."
+            exit 1
+          fi
+
   deploy-staging:
+    needs: validate-migrations
     runs-on: ubuntu-latest
     permissions:
       contents: read
