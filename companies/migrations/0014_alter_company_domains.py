@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("companies", "0001_initial_squashed_0013_department_designation"),
+        ("companies", "0001_initial"),
     ]
 
     operations = [
