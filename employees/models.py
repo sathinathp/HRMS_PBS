@@ -678,6 +678,18 @@ class Attendance(models.Model):
             is_active=True,
         ).order_by("-session_number").first()
 
+    def can_clock_in(self):
+        """Check if employee can clock in based on current state and session limits"""
+        # Cannot clock in if already clocked in
+        if self.is_currently_clocked_in:
+            return False
+        
+        # Cannot clock in if maximum daily sessions reached
+        if self.daily_sessions_count >= self.max_daily_sessions:
+            return False
+        
+        return True
+
 
 class AttendanceSession(models.Model):
     """Individual clock-in/clock-out sessions within a day"""
