@@ -27,6 +27,13 @@ import json
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from timezonefinder import TimezoneFinder
+from loguru import logger
+from core.error_handling import (
+    safe_get_employee_profile,
+    safe_queryset_filter,
+    safe_parse_location,
+    capture_exception,
+)
 
 
 def detect_timezone_from_coordinates(lat, lng):
@@ -38,7 +45,7 @@ def detect_timezone_from_coordinates(lat, lng):
         timezone_name = tf.timezone_at(lat=float(lat), lng=float(lng))
         return timezone_name if timezone_name else "Asia/Kolkata"
     except Exception as e:
-        print(f"Error detecting timezone: {e}")
+        logger.warning("Error detecting timezone", lat=lat, lng=lng, error=str(e))
         return "Asia/Kolkata"
 
 
@@ -72,10 +79,7 @@ class EmployeeListView(LoginRequiredMixin, ListView):
             except Employee.DoesNotExist:
                 queryset = Employee.objects.none()
         else:
-            try:
-                queryset = Employee.objects.filter(user=user)
-            except:
-                queryset = Employee.objects.none()
+            queryset = safe_queryset_filter(Employee, user=user)
 
         # Apply employment status filter
         status_filter = self.request.GET.get("status", "active")
@@ -117,10 +121,7 @@ class EmployeeListView(LoginRequiredMixin, ListView):
             except Employee.DoesNotExist:
                 all_employees = Employee.objects.none()
         else:
-            try:
-                all_employees = Employee.objects.filter(user=user)
-            except:
-                all_employees = Employee.objects.none()
+            all_employees = safe_queryset_filter(Employee, user=user)
 
         context["active_count"] = all_employees.filter(is_active=True).count()
         context["inactive_count"] = all_employees.filter(is_active=False).count()
@@ -227,8 +228,8 @@ class EmployeeUpdateView(LoginRequiredMixin, CompanyAdminRequiredMixin, UpdateVi
                     EmergencyContact.objects.filter(
                         id=contact_id, employee=employee
                     ).delete()
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to delete emergency contact", contact_id=contact_id, error=str(e))
 
         # Delete contacts that were removed (not in processed list)
         # This handles contacts that were removed from the form
@@ -754,10 +755,7 @@ def employee_profile(request):
 
     # Try to get or create employee profile if User is a Company Admin/Manager
     # This prevents the "blank page" issue for the initial admin user.
-    try:
-        employee = user.employee_profile
-    except Exception:
-        employee = None
+    employee = safe_get_employee_profile(user)
 
     if not employee:
         if user.company:
@@ -889,16 +887,11 @@ class LeaveApplyView(LoginRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        try:
-            employee = self.request.user.employee_profile
-            if hasattr(employee, "leave_balance"):
-                context["cl_balance"] = employee.leave_balance.casual_leave_balance
-                context["el_balance"] = employee.leave_balance.earned_leave_balance
-            else:
-                context["cl_balance"] = 0
-                context["el_balance"] = 0
-        except Exception:
-            # Fallback if something goes wrong (e.g. no profile)
+        employee = safe_get_employee_profile(self.request.user)
+        if employee and hasattr(employee, "leave_balance"):
+            context["cl_balance"] = employee.leave_balance.casual_leave_balance
+            context["el_balance"] = employee.leave_balance.earned_leave_balance
+        else:
             context["cl_balance"] = 0
             context["el_balance"] = 0
         return context
@@ -1101,16 +1094,9 @@ def attendance_map(request, pk):
         # Prepare Map Data
         map_locations = []
 
-        def parse_loc(loc_str):
-            try:
-                parts = loc_str.split(",")
-                return float(parts[0]), float(parts[1])
-            except:
-                return None, None
-
         # 1. Clock In
         if attendance.location_in:
-            lat, lng = parse_loc(attendance.location_in)
+            lat, lng = safe_parse_location(attendance.location_in)
             if lat:
                 map_locations.append(
                     {
@@ -1134,7 +1120,7 @@ def attendance_map(request, pk):
 
         # 3. Clock Out
         if attendance.location_out:
-            lat, lng = parse_loc(attendance.location_out)
+            lat, lng = safe_parse_location(attendance.location_out)
             if lat:
                 map_locations.append(
                     {
@@ -1216,17 +1202,9 @@ def employee_detail(request, pk):
 
         map_data = []
         if map_attendance:
-            # Parse Lat/Lng helper
-            def parse_loc(loc_str):
-                try:
-                    parts = loc_str.split(",")
-                    return float(parts[0]), float(parts[1])
-                except:
-                    return None, None
-
             # Clock In Marker
             if map_attendance.location_in:
-                lat, lng = parse_loc(map_attendance.location_in)
+                lat, lng = safe_parse_location(map_attendance.location_in)
                 if lat:
                     map_data.append(
                         {
@@ -1264,7 +1242,7 @@ def employee_detail(request, pk):
 
             # Clock Out Marker
             if map_attendance.location_out:
-                lat, lng = parse_loc(map_attendance.location_out)
+                lat, lng = safe_parse_location(map_attendance.location_out)
                 if lat:
                     map_data.append(
                         {
@@ -1596,16 +1574,9 @@ def get_attendance_map_data(request, pk):
 
         map_locations = []
 
-        def parse_loc(loc_str):
-            try:
-                parts = loc_str.split(",")
-                return float(parts[0]), float(parts[1])
-            except:
-                return None, None
-
         # 1. Clock In
         if attendance.location_in:
-            lat, lng = parse_loc(attendance.location_in)
+            lat, lng = safe_parse_location(attendance.location_in)
             if lat:
                 map_locations.append(
                     {
@@ -1643,7 +1614,7 @@ def get_attendance_map_data(request, pk):
 
         # 3. Clock Out
         if attendance.location_out:
-            lat, lng = parse_loc(attendance.location_out)
+            lat, lng = safe_parse_location(attendance.location_out)
             if lat:
                 map_locations.append(
                     {
@@ -2010,10 +1981,10 @@ class RegularizationListView(LoginRequiredMixin, ListView):
             return qs.filter(employee__manager=user)
         else:
             # Employees see their own
-            try:
-                return qs.filter(employee=user.employee_profile)
-            except:
-                return qs.none()
+            employee = safe_get_employee_profile(user)
+            if employee:
+                return qs.filter(employee=employee)
+            return qs.none()
 
 
 @login_required
@@ -2278,8 +2249,8 @@ def run_monthly_accrual(request):
             try:
                 month_name = calendar.month_name[int(month)]
                 period_msg = f"for {month_name} {year}"
-            except:
-                pass
+            except (ValueError, IndexError) as e:
+                logger.debug("Failed to parse month/year for accrual message", month=month, year=year, error=str(e))
 
         # Run the command
         call_command("accrue_monthly_leaves")
@@ -2293,6 +2264,8 @@ def run_monthly_accrual(request):
         messages.success(request, success_msg)
 
     except Exception as e:
+        logger.exception("Error running monthly leave accrual", error=str(e))
+        capture_exception(e, properties={"action": "manual_accrual"})
         messages.error(request, f"Error running accrual: {str(e)}")
 
     return redirect("leave_configuration")

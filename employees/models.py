@@ -3,6 +3,7 @@ from django.conf import settings
 from django.utils import timezone
 from companies.models import Company
 from datetime import timedelta
+from loguru import logger
 
 
 class Employee(models.Model):
@@ -957,11 +958,12 @@ class LeaveRequest(models.Model):
             if isinstance(date_obj, str):
                 try:
                     return datetime.strptime(date_obj, "%Y-%m-%d").date()
-                except:
-                    # Try other formats
+                except ValueError:
+                    # Try ISO format
                     try:
                         return datetime.fromisoformat(date_obj).date()
-                    except:
+                    except (ValueError, TypeError):
+                        logger.debug("Failed to parse date for leave calculation", date_obj=date_obj)
                         return None
             elif isinstance(date_obj, datetime):
                 return date_obj.date()
@@ -990,7 +992,11 @@ class LeaveRequest(models.Model):
                 return balance.earned_leave_balance < self.total_days
             elif self.leave_type == "CO":
                 return balance.comp_off_balance < self.total_days
-        except:
+        except AttributeError:
+            # Employee has no leave_balance - consider as negative
+            return False
+        except Exception as e:
+            logger.warning("Error checking leave balance", error=str(e), leave_request_id=self.id)
             return False
         return False
 
