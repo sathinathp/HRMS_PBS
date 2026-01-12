@@ -303,6 +303,12 @@ class Attendance(models.Model):
         default=0, help_text="Minutes late after grace period"
     )
 
+    total_working_hours = models.FloatField(
+        default=0.0, help_text="Total hours worked today across all sessions"
+    )
+
+
+
     # Grace Period Logic
     is_grace_used = models.BooleanField(
         default=False, help_text="Logged in late but within grace period"
@@ -614,6 +620,35 @@ class Attendance(models.Model):
             >= expected_hours * 0.9,  # 90% completion threshold
         }
 
+
+
+    def calculate_total_working_hours(self):
+        """Calculate and update total working hours from all sessions"""
+        try:
+            from .models import AttendanceSession
+            
+            # Fetch all completed sessions for this attendance record
+            sessions = AttendanceSession.objects.filter(
+                employee=self.employee,
+                date=self.date,
+                clock_in__isnull=False,
+                clock_out__isnull=False
+            )
+
+            total_seconds = 0
+            for session in sessions:
+                duration = session.clock_out - session.clock_in
+                total_seconds += duration.total_seconds()
+
+            # Convert to hours
+            self.total_working_hours = round(total_seconds / 3600, 2)
+            self.save(update_fields=['total_working_hours'])
+            return self.total_working_hours
+            
+        except Exception as e:
+            logger.error(f"Error calculating total working hours: {str(e)}")
+            return 0.0
+
     def get_shift_duration_hours(self):
         """Calculate expected shift duration in hours based on employee's shift"""
         from datetime import datetime
@@ -671,7 +706,8 @@ class Attendance(models.Model):
         return False
 
     def get_current_session(self):
-        """Get the currently active session for this attendance record"""
+        """Get the currently active session (not clocked out)"""
+        from .models import AttendanceSession
         return AttendanceSession.objects.filter(
             employee=self.employee,
             date=self.date,
