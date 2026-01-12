@@ -304,10 +304,30 @@ def clock_in(request):
 
             # Ensure employee profile exists
             if not hasattr(request.user, "employee_profile"):
-                return JsonResponse(
-                    {"status": "error", "message": "No employee profile found"},
-                    status=400,
-                )
+                # Auto-create for Company Admin to prevent setup deadlock
+                if request.user.role == User.Role.COMPANY_ADMIN and request.user.company:
+                    from .models import Employee
+                    try:
+                        Employee.objects.create(
+                            user=request.user,
+                            company=request.user.company,
+                            designation="Administrator",
+                            department="Management",
+                            badge_id=f"ADM{request.user.id}",
+                        )
+                        # Refresh user to get the profile
+                        request.user.refresh_from_db()
+                    except Exception as e:
+                        logger.error(f"Failed to auto-create profile in clock-in: {e}")
+                        return JsonResponse(
+                            {"status": "error", "message": "No employee profile found. Please contact support."},
+                            status=400,
+                        )
+                else:
+                    return JsonResponse(
+                        {"status": "error", "message": "No employee profile found. Please set up your profile first."},
+                        status=400,
+                    )
 
             employee = request.user.employee_profile
             today = timezone.localdate()
@@ -324,6 +344,10 @@ def clock_in(request):
             )
 
             # Check if employee can clock in
+            # Check if employee can clock in
+            # FORCE OVERRIDE: Allow up to 10 sessions/day regardless of model setting (user request for consistency)
+            MAX_ALLOWED_SESSIONS = 10 
+            
             if not attendance.can_clock_in():
                 if attendance.is_currently_clocked_in:
                     return JsonResponse(
@@ -333,13 +357,18 @@ def clock_in(request):
                             "already_clocked_in": True,
                         }
                     )
-                elif attendance.daily_sessions_count >= attendance.max_daily_sessions:
+                # Use loose check instead of strict model field check
+                elif attendance.daily_sessions_count >= MAX_ALLOWED_SESSIONS:
                     return JsonResponse(
                         {
                             "status": "error",
-                            "message": f"Maximum {attendance.max_daily_sessions} sessions per day reached.",
+                            "message": f"Maximum {MAX_ALLOWED_SESSIONS} sessions per day reached.",
                         }
                     )
+                    
+            # Ensure model reflects this override if needed
+            if attendance.max_daily_sessions < MAX_ALLOWED_SESSIONS:
+                attendance.max_daily_sessions = MAX_ALLOWED_SESSIONS
 
             # Get timezone from request data or detect from coordinates
             user_timezone = data.get("timezone")
@@ -402,24 +431,30 @@ def clock_in(request):
 
             # Calculate location tracking end time based on shift duration
             shift = employee.assigned_shift
-            if shift:
-                if hasattr(shift, "get_shift_duration_timedelta"):
-                    shift_duration = shift.get_shift_duration_timedelta()
-                else:
-                    from datetime import datetime, timedelta
+            attendance.location_tracking_end_time = None
+            
+            if shift and shift.start_time and shift.end_time:
+                try:
+                    if hasattr(shift, "get_shift_duration_timedelta"):
+                        shift_duration = shift.get_shift_duration_timedelta()
+                    else:
+                        from datetime import datetime, timedelta
 
-                    today_date = timezone.localdate()
-                    s_start = datetime.combine(today_date, shift.start_time)
-                    s_end = datetime.combine(today_date, shift.end_time)
-                    if s_end < s_start:
-                        s_end += timedelta(days=1)
-                    shift_duration = s_end - s_start
+                        today_date = timezone.localdate()
+                        s_start = datetime.combine(today_date, shift.start_time)
+                        s_end = datetime.combine(today_date, shift.end_time)
+                        if s_end < s_start:
+                            s_end += timedelta(days=1)
+                        shift_duration = s_end - s_start
 
-                attendance.location_tracking_end_time = (
-                    session.clock_in + shift_duration
-                )
-            else:
-                # Default to 9 hours if no shift assigned
+                    attendance.location_tracking_end_time = (
+                        session.clock_in + shift_duration
+                    )
+                except Exception as e:
+                    logger.warning(f"Error calculating shift duration for {employee}: {e}.Using default 9h.")
+
+            if not attendance.location_tracking_end_time:
+                # Default to 9 hours if no shift assigned or error occurred
                 from datetime import timedelta
 
                 attendance.location_tracking_end_time = session.clock_in + timedelta(
@@ -512,7 +547,7 @@ def clock_out(request):
                         timezone.now() - current_session.clock_in
                     ).total_seconds() / 3600
                     expected_hours = (
-                        8.0  # Default 8 hours, can be customized based on shift
+                        9.0  # Default 9 hours shift
                     )
 
                     if worked_hours < expected_hours:
@@ -523,13 +558,13 @@ def clock_out(request):
                             {
                                 "status": "confirmation_required",
                                 "requires_confirmation": True,
-                                "message": f"Session {current_session.session_number} is not completed yet. Are you sure you want to clock out?",
-                                "worked_hours": round(worked_hours, 2),
-                                "expected_hours": round(expected_hours, 2),
+                                "message": f"Your {int(expected_hours)}-hour shift is not completed yet. Do you want to clock out?",
+                                "worked_hours": round(worked_hours, 1),
+                                "expected_hours": round(expected_hours, 1),
                                 "completion_percentage": round(
                                     completion_percentage, 1
                                 ),
-                                "remaining_hours": round(remaining_hours, 2),
+                                "remaining_hours": round(remaining_hours, 1),
                             }
                         )
 
@@ -587,6 +622,37 @@ def clock_out(request):
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
     return JsonResponse({"status": "error", "message": "Invalid method"}, status=405)
+
+
+def perform_auto_clock_out(attendance, session, lat, lng):
+    """
+    Helper to perform system-triggered clock out when shift ends
+    """
+    try:
+        current_time = timezone.now()
+        
+        # Process clock-out
+        session.clock_out = current_time
+        session.clock_out_latitude = lat
+        session.clock_out_longitude = lng
+        session.is_active = False
+        session.save()
+
+        # Update attendance
+        attendance.is_currently_clocked_in = False
+        attendance.current_session_type = None
+        attendance.clock_out = current_time
+        attendance.location_out = f"{lat},{lng}"
+        attendance.location_tracking_active = False
+        
+        attendance.calculate_total_working_hours()
+        attendance.save()
+        
+        return True
+    except Exception as e:
+        logger.error(f"Auto clock-out failed: {str(e)}")
+        return False
+
 
 
 @csrf_exempt
@@ -659,20 +725,33 @@ def update_location(request):
                         }
                     )
 
-                # Check if tracking should be stopped based on session duration
+                # Check if shift is complete (9 hours)
                 if current_session.clock_in:
                     session_duration = timezone.now() - current_session.clock_in
-                    # Stop tracking after 10 hours for safety
-                    if session_duration.total_seconds() >= 10 * 3600:
-                        attendance.location_tracking_active = False
-                        attendance.save()
-                        return JsonResponse(
-                            {
-                                "status": "tracking_stopped",
-                                "message": "Location tracking stopped (10 hour limit reached)",
-                                "location_tracking_active": False,
-                            }
-                        )
+                    # Auto-stop after 9 hours (Exact shift duration)
+                    if session_duration.total_seconds() >= 9 * 3600:
+                        
+                        # Perform auto clock-out
+                        if perform_auto_clock_out(attendance, current_session, lat, lng):
+                            return JsonResponse(
+                                {
+                                    "status": "shift_completed",
+                                    "message": "Shift completed (9 hours). Auto clocked out.",
+                                    "location_tracking_active": False,
+                                    "clock_out_performed": True
+                                }
+                            )
+                        else:
+                            # Fallback if auto-clockout fails, just stop tracking
+                            attendance.location_tracking_active = False
+                            attendance.save()
+                            return JsonResponse(
+                                {
+                                    "status": "tracking_stopped",
+                                    "message": "Shift time exceeded. Tracking stopped.",
+                                    "location_tracking_active": False,
+                                }
+                            )
 
                 # Log location for current session
                 if attendance.location_tracking_active:
@@ -685,11 +764,21 @@ def update_location(request):
                         longitude=lng,
                         accuracy=accuracy,
                     )
-
-                    # Also create general location log for backward compatibility
-                    LocationLog.objects.create(
-                        employee=employee, latitude=str(lat), longitude=str(lng)
-                    )
+                    
+                    # Log to generic LocationLog as well - ONLY if accuracy is good
+                    # Filter out poor accuracy (likely network based or bad signal) to avoid "fake" look
+                    # Threshold: 2500 meters (Relaxed to ensure tracking works for all users/devices)
+                    is_accurate = True
+                    if accuracy and float(accuracy) > 2500:
+                         is_accurate = False
+                         
+                    if is_accurate:     
+                        # Also create general location log for backward compatibility
+                        LocationLog.objects.create(
+                            employee=employee,
+                            latitude=str(lat),
+                            longitude=str(lng)
+                        )
 
                     # Prepare response
                     response_data = {
