@@ -11,6 +11,7 @@ urlpatterns = [
     path("superadmin/", include("superadmin.urls")),
     path("ai/", include("ai_assistant.urls")),  # AI-powered features
     path("handbooks/", include("handbooks.urls", namespace="handbooks")),  # Employee Handbooks
+    path("policies/", include("policies.urls", namespace="policies")),  # Company Policies
     path(
         "accounts/", include("django.contrib.auth.urls")
     ),  # For password reset etc if needed
