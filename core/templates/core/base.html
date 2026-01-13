@@ -464,7 +464,11 @@
                 </a>
                 <a href="{% url 'handbooks:admin_handbook_list' %}"
                     class="{% if 'handbooks/admin' in request.path %}active{% endif %}">
-                    <i class="fas fa-book"></i> Handbook & Policies
+                    <i class="fas fa-book"></i> Employee Handbook
+                </a>
+                <a href="{% url 'policies:admin_policy_list' %}"
+                    class="{% if 'policies/admin' in request.path %}active{% endif %}">
+                    <i class="fas fa-file-contract"></i> Policies
                 </a>
             </div>
         </div>
