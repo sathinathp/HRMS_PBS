@@ -627,9 +627,8 @@
                     <option value="">All Types</option>
                     <option value="CL" {% if leave_type_filter == 'CL' %}selected{% endif %}>Casual Leave</option>
                     <option value="SL" {% if leave_type_filter == 'SL' %}selected{% endif %}>Sick Leave</option>
-                    <option value="EL" {% if leave_type_filter == 'EL' %}selected{% endif %}>Earned Leave</option>
-                    <option value="CO" {% if leave_type_filter == 'CO' %}selected{% endif %}>Comp Off</option>
-                    <option value="UL" {% if leave_type_filter == 'UL' %}selected{% endif %}>Unpaid Leave</option>
+                    <option value="UL" {% if leave_type_filter == 'UL' %}selected{% endif %}>Unpaid Leave (LOP)</option>
+                    <option value="OD" {% if leave_type_filter == 'OD' %}selected{% endif %}>On Duty</option>
                     <option value="OT" {% if leave_type_filter == 'OT' %}selected{% endif %}>Others</option>
                 </select>
             </div>
@@ -749,30 +748,20 @@
             <div class="balance-grid">
                 <div class="balance-item">
                     <div class="balance-label">CL</div>
-                    <div
-                        class="balance-value {% if leave.employee.leave_balance.casual_leave_balance >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
+                    <div class="balance-value balance-positive">
                         {{ leave.employee.leave_balance.casual_leave_balance }}
                     </div>
                 </div>
                 <div class="balance-item">
                     <div class="balance-label">SL</div>
-                    <div
-                        class="balance-value {% if leave.employee.leave_balance.sick_leave_balance >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
+                    <div class="balance-value balance-positive">
                         {{ leave.employee.leave_balance.sick_leave_balance }}
                     </div>
                 </div>
                 <div class="balance-item">
-                    <div class="balance-label">EL</div>
-                    <div
-                        class="balance-value {% if leave.employee.leave_balance.earned_leave_balance >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
-                        {{ leave.employee.leave_balance.earned_leave_balance }}
-                    </div>
-                </div>
-                <div class="balance-item">
-                    <div class="balance-label">Comp Off</div>
-                    <div
-                        class="balance-value {% if leave.employee.leave_balance.comp_off_balance >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
-                        {{ leave.employee.leave_balance.comp_off_balance }}
+                    <div class="balance-label">LOP</div>
+                    <div class="balance-value balance-negative">
+                        {{ leave.employee.leave_balance.unpaid_leave }}
                     </div>
                 </div>
             </div>
@@ -780,7 +769,7 @@
             {% if leave.is_negative_balance %}
             <div class="warning-banner">
                 <i class="fas fa-exclamation-triangle warning-icon"></i>
-                <p class="warning-text">Warning: Approving this leave will result in negative balance!</p>
+                <p class="warning-text">Note: Approving this leave will result in LOP (Loss of Pay)</p>
             </div>
             {% endif %}
         </div>

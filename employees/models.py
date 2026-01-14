@@ -961,16 +961,10 @@ class LeaveBalance(models.Model):
     sick_leave_allocated = models.FloatField(
         default=12.0, help_text="Total SL allocated per year"
     )
-    earned_leave_allocated = models.FloatField(
-        default=12.0, help_text="Total EL allocated per year"
-    )
-    comp_off_allocated = models.FloatField(default=0.0, help_text="Comp off earned")
 
     # Leave Used
     casual_leave_used = models.FloatField(default=0.0)
     sick_leave_used = models.FloatField(default=0.0)
-    earned_leave_used = models.FloatField(default=0.0)
-    comp_off_used = models.FloatField(default=0.0)
     unpaid_leave = models.FloatField(default=0.0)
 
     # Carry forward / Lapsed
@@ -989,24 +983,12 @@ class LeaveBalance(models.Model):
     def sick_leave_balance(self):
         return max(0, self.sick_leave_allocated - self.sick_leave_used)
 
-    @property
-    def earned_leave_balance(self):
-        return max(0, self.earned_leave_allocated - self.earned_leave_used)
-
-    @property
-    def comp_off_balance(self):
-        return max(0, self.comp_off_allocated - self.comp_off_used)
-
     def get_available_balance(self, leave_type):
         """Get available balance for a specific leave type"""
         if leave_type == 'CL':
             return self.casual_leave_balance
         elif leave_type == 'SL':
             return self.sick_leave_balance
-        elif leave_type == 'EL':
-            return self.earned_leave_balance
-        elif leave_type == 'CO':
-            return self.comp_off_balance
         else:
             return 0
 
@@ -1022,11 +1004,15 @@ class LeaveBalance(models.Model):
                 'will_be_lop': True
             }
         
+        # For other leave types, check if there's sufficient balance
+        shortfall = max(0, days_requested - available_balance)
+        will_be_lop = shortfall > 0
+        
         return {
-            'can_apply': available_balance >= days_requested,
+            'can_apply': True,  # Always allow application, excess will be LOP
             'available': available_balance,
-            'shortfall': max(0, days_requested - available_balance),
-            'will_be_lop': available_balance < days_requested
+            'shortfall': shortfall,
+            'will_be_lop': will_be_lop
         }
 
     def apply_leave_deduction(self, leave_type, days_approved):
@@ -1035,10 +1021,6 @@ class LeaveBalance(models.Model):
             self.casual_leave_used += days_approved
         elif leave_type == 'SL':
             self.sick_leave_used += days_approved
-        elif leave_type == 'EL':
-            self.earned_leave_used += days_approved
-        elif leave_type == 'CO':
-            self.comp_off_used += days_approved
         elif leave_type == 'UL':
             self.unpaid_leave += days_approved
         
@@ -1049,8 +1031,6 @@ class LeaveBalance(models.Model):
         return (
             self.casual_leave_balance
             + self.sick_leave_balance
-            + self.earned_leave_balance
-            + self.comp_off_balance
         )
 
     @property
@@ -1058,8 +1038,6 @@ class LeaveBalance(models.Model):
         return (
             self.casual_leave_balance < 0
             or self.sick_leave_balance < 0
-            or self.earned_leave_balance < 0
-            or self.comp_off_balance < 0
         )
 
     def __str__(self):
@@ -1070,8 +1048,6 @@ class LeaveRequest(models.Model):
     LEAVE_TYPES = [
         ("CL", "Casual Leave"),
         ("SL", "Sick Leave"),
-        ("EL", "Earned Leave"),
-        ("CO", "Comp Off"),
         ("UL", "Unpaid Leave (LOP)"),
         ("OD", "On Duty"),
         ("OT", "Others"),
@@ -1172,10 +1148,6 @@ class LeaveRequest(models.Model):
                 return balance.casual_leave_balance < self.total_days
             elif self.leave_type == "SL":
                 return balance.sick_leave_balance < self.total_days
-            elif self.leave_type == "EL":
-                return balance.earned_leave_balance < self.total_days
-            elif self.leave_type == "CO":
-                return balance.comp_off_balance < self.total_days
         except:
             return False
         return False
@@ -1205,18 +1177,18 @@ class LeaveRequest(models.Model):
     def _generate_validation_message(self, leave_check):
         """Generate user-friendly validation message"""
         if self.leave_type == 'UL':
-            return f"Unpaid Leave (LOP) application for {self.total_days} days will be processed."
+            return f"Approving this Unpaid Leave (LOP) application for {self.total_days} days will result in LOP."
         
         if leave_check['can_apply']:
-            return f"Leave application approved. You have {leave_check['available']} days available."
+            return f"Leave application can be approved. You have {leave_check['available']} days available."
         else:
             available = leave_check['available']
             shortfall = leave_check['shortfall']
             
             if available == 0:
-                return f"You don't have any {self.get_leave_type_display()} balance. This will be processed as Unpaid Leave (LOP)."
+                return f"You don't have any {self.get_leave_type_display()} balance. Approving this leave will result in {self.total_days} days of LOP."
             else:
-                return f"You only have {available} days of {self.get_leave_type_display()} available. {shortfall} days will be processed as Unpaid Leave (LOP)."
+                return f"You only have {available} days of {self.get_leave_type_display()} available. Approving this leave will result in {shortfall} days of LOP."
 
     def save(self, *args, **kwargs):
         """Override save to validate leave application"""
@@ -1233,36 +1205,40 @@ class LeaveRequest(models.Model):
         if self.status != 'PENDING':
             return False
         
-        self.status = 'APPROVED'
-        self.approved_by = approved_by_user
-        self.approved_at = timezone.now()
-        
-        # Deduct from leave balance
+        # Deduct from leave balance first, then update status
         try:
             balance = self.employee.leave_balance
             validation = self.validate_leave_application()
             
-            if validation['will_be_lop'] and self.leave_type != 'UL':
+            if self.leave_type == 'UL':
+                # Direct unpaid leave application
+                balance.apply_leave_deduction('UL', self.total_days)
+            elif validation['will_be_lop']:
                 # Split into paid leave + LOP
                 available = validation['available_balance']
                 lop_days = validation['shortfall']
                 
+                # Deduct available balance from requested leave type
                 if available > 0:
                     balance.apply_leave_deduction(self.leave_type, available)
+                
+                # Deduct remaining days as LOP
                 if lop_days > 0:
                     balance.apply_leave_deduction('UL', lop_days)
             else:
-                # Full deduction from requested leave type
+                # Full deduction from requested leave type (sufficient balance)
                 balance.apply_leave_deduction(self.leave_type, self.total_days)
             
+            # Update status after successful deduction
+            self.status = 'APPROVED'
+            self.approved_by = approved_by_user
+            self.approved_at = timezone.now()
             self.save()
             return True
             
         except Exception as e:
-            # Rollback status change
-            self.status = 'PENDING'
-            self.approved_by = None
-            self.approved_at = None
+            # Don't change status if deduction fails
+            print(f"Error approving leave: {e}")
             return False
 
     def __str__(self):
@@ -1464,8 +1440,6 @@ def create_leave_balance(sender, instance, created, **kwargs):
         # Default allocations (can be customized per company)
         casual_leave = 12.0
         sick_leave = 12.0
-        earned_leave = 12.0
-        comp_off = 0.0
         
         # Company-specific rules
         if company:
@@ -1474,24 +1448,19 @@ def create_leave_balance(sender, instance, created, **kwargs):
                 # Petabytz specific rules
                 casual_leave = 12.0
                 sick_leave = 12.0
-                earned_leave = 15.0
             elif 'bluebix' in company_name:
                 # Bluebix specific rules
                 casual_leave = 10.0
                 sick_leave = 10.0
-                earned_leave = 12.0
             elif 'softstandard' in company_name or 'soft standard' in company_name:
                 # SoftStandard specific rules
                 casual_leave = 12.0
                 sick_leave = 8.0
-                earned_leave = 12.0
         
         LeaveBalance.objects.get_or_create(
             employee=instance,
             defaults={
                 'casual_leave_allocated': casual_leave,
                 'sick_leave_allocated': sick_leave,
-                'earned_leave_allocated': earned_leave,
-                'comp_off_allocated': comp_off,
             }
         )
