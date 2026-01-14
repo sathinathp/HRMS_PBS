@@ -33,6 +33,12 @@ done
 
 echo "Running database migrations..."
 
+# Ensure media directories exist
+echo "Creating media directories..."
+mkdir -p /app/media/employee_avatars
+mkdir -p /app/media/payslips
+mkdir -p /app/media/id_proofs
+
 # Handle potential migration conflicts by faking problematic migrations first
 echo "🔍 Checking migration state and handling conflicts..."
 
