@@ -1065,12 +1065,13 @@
                             <div class="small fw-bold opacity-75" style="font-size: 0.65rem; letter-spacing: 0.05em;">
                                 BREAKS</div>
                             {% if assigned_shift.breaks.all %}
-                            {% for break_item in assigned_shift.breaks.all %}
-                            <div class="fw-bold text-white" style="font-size: 0.85rem;">
-                                {{ break_item.name }}: {{ break_item.start_time|time:"H:i" }} - {{
-                                break_item.end_time|time:"H:i" }}
-                            </div>
-                            {% endfor %}
+                                {% for break_item in assigned_shift.breaks.all %}
+                                <div class="fw-bold text-white" style="font-size: 0.85rem;">
+                                    {{ break_item.name }}: 
+                                    {% if break_item.start_time %}{{ break_item.start_time|time:"H:i" }}{% else %}--:--{% endif %} - 
+                                    {% if break_item.end_time %}{{ break_item.end_time|time:"H:i" }}{% else %}--:--{% endif %}
+                                </div>
+                                {% endfor %}
                             {% else %}
                             <div class="fw-bold text-white opacity-75" style="font-size: 0.85rem;">No breaks configured
                             </div>

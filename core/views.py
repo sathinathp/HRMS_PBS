@@ -1988,63 +1988,34 @@ def leave_requests(request):
             )
 
             if action == "approve":
-                prev_status = leave_request.status
-
-                # Only transition and deduct if this wasn't already approved
-                if prev_status != "APPROVED":
-                    leave_request.status = "APPROVED"
-
-                    leave_request.approved_by = request.user
-
-                    leave_request.approved_at = timezone.now()
-
+                # Use the model's approve_leave method which handles LOP correctly
+                if leave_request.approve_leave(request.user):
                     leave_request.admin_comment = admin_comment
-
-                    # Update leave balance
-
-                    balance = leave_request.employee.leave_balance
-
-                    days = leave_request.total_days
-
-                    if leave_request.leave_type == "CL":
-                        balance.casual_leave_used += days
-
-                    elif leave_request.leave_type == "SL":
-                        balance.sick_leave_used += days
-
-                    elif leave_request.leave_type == "EL":
-                        balance.earned_leave_used += days
-
-                    elif leave_request.leave_type == "CO":
-                        balance.comp_off_used += days
-
-                    elif leave_request.leave_type == "UL":
-                        balance.unpaid_leave += days
-
-                    balance.save()
-
                     leave_request.save()
-
+                    
                     messages.success(
                         request,
                         f"Leave request approved for {leave_request.employee.user.get_full_name()}",
                     )
+
+                    # Send Approval Email
+                    try:
+                        from core.email_utils import send_leave_approval_notification
+
+                        if not send_leave_approval_notification(leave_request):
+                            messages.warning(
+                                request, "Leave approved, but email notification failed."
+                            )
+                    except Exception as e:
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+                        logger.error(f"Error sending approval email: {e}")
                 else:
-                    messages.info(request, "Leave request was already approved earlier.")
-
-                # Send Approval Email
-                try:
-                    from core.email_utils import send_leave_approval_notification
-
-                    if not send_leave_approval_notification(leave_request):
-                        messages.warning(
-                            request, "Leave approved, but email notification failed."
-                        )
-                except Exception as e:
-                    import logging
-
-                    logger = logging.getLogger(__name__)
-                    logger.error(f"Error sending approval email: {e}")
+                    messages.error(
+                        request,
+                        f"Failed to approve leave request for {leave_request.employee.user.get_full_name()}. Please try again."
+                    )
 
             elif action == "reject":
                 if not admin_comment:

@@ -1162,20 +1162,14 @@ class LeaveApplyView(LoginRequiredMixin, CreateView):
                 balance = employee.leave_balance
                 context["cl_balance"] = balance.casual_leave_balance
                 context["sl_balance"] = balance.sick_leave_balance
-                context["el_balance"] = balance.earned_leave_balance
-                context["co_balance"] = balance.comp_off_balance
                 context["leave_balance"] = balance
             else:
                 context["cl_balance"] = 0
                 context["sl_balance"] = 0
-                context["el_balance"] = 0
-                context["co_balance"] = 0
         except Exception:
             # Fallback if something goes wrong (e.g. no profile)
             context["cl_balance"] = 0
             context["sl_balance"] = 0
-            context["el_balance"] = 0
-            context["co_balance"] = 0
         return context
 
     def form_valid(self, form):
@@ -1286,8 +1280,6 @@ def check_leave_balance(request):
             balances = {
                 'CL': balance.casual_leave_balance,
                 'SL': balance.sick_leave_balance,
-                'EL': balance.earned_leave_balance,
-                'CO': balance.comp_off_balance,
             }
             
             return JsonResponse({

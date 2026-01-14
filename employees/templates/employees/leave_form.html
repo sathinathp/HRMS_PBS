@@ -259,9 +259,7 @@
                     <div class="info-text">
                         <strong>Current Leave Balances:</strong><br>
                         Casual Leave: <span class="fw-bold text-primary">{{ cl_balance|floatformat:1 }}</span> days |
-                        Sick Leave: <span class="fw-bold text-primary">{{ sl_balance|floatformat:1 }}</span> days |
-                        Earned Leave: <span class="fw-bold text-primary">{{ el_balance|floatformat:1 }}</span> days |
-                        Comp Off: <span class="fw-bold text-primary">{{ co_balance|floatformat:1 }}</span> days
+                        Sick Leave: <span class="fw-bold text-primary">{{ sl_balance|floatformat:1 }}</span> days
                         <br><br>
                         <small>If you don't have sufficient balance, the excess days will be processed as <strong>Unpaid Leave (LOP)</strong>.</small>
                     </div>
@@ -336,8 +334,6 @@
     document.addEventListener('DOMContentLoaded', function () {
         const clBalance = parseFloat("{{ cl_balance|default:0 }}");
         const slBalance = parseFloat("{{ sl_balance|default:0 }}");
-        const elBalance = parseFloat("{{ el_balance|default:0 }}");
-        const coBalance = parseFloat("{{ co_balance|default:0 }}");
 
         // Form elements
         const leaveTypeSelect = document.querySelector('select[name="leave_type"]');
