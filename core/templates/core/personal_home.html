@@ -585,7 +585,7 @@
 
 {% block content %}
 <!-- Hidden Data Context for JS -->
-<div id="page-context" data-csrf="{{ csrf_token }}" data-clock-in="{{ attendance.clock_in|date:'Y-m-d H:i:s' }}"
+<div id="page-context" data-csrf="{{ csrf_token }}" data-clock-in="{{ attendance.clock_in.isoformat }}"
     data-avg-hours="{{ avg_hours|default:'00:00' }}" style="display:none;"></div>
 <div class="container-fluid py-4 px-4">
     <!-- Header -->
@@ -918,6 +918,34 @@
                         }
                     }
 
+                    .timeline-time-tooltip {
+                        position: absolute;
+                        top: 24px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: #fff;
+                        color: #4338ca;
+                        padding: 4px 12px;
+                        border-radius: 20px;
+                        font-size: 0.75rem;
+                        font-weight: 700;
+                        white-space: nowrap;
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                        z-index: 100;
+                        pointer-events: none;
+                    }
+
+                    .timeline-time-tooltip::after {
+                        content: '';
+                        position: absolute;
+                        top: -4px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        border-left: 5px solid transparent;
+                        border-right: 5px solid transparent;
+                        border-bottom: 5px solid #fff;
+                    }
+
                     .t-node {
                         display: flex;
                         flex-direction: column;
@@ -1035,7 +1063,9 @@
                         data-end="{% if assigned_shift %}{{ assigned_shift.end_time|time:'H:i' }}{% else %}18:00{% endif %}">
                         <div class="timeline-track">
                             <div class="timeline-progress-bar" id="timeline-progress">
-                                <div class="timeline-dot-indicator"></div>
+                                <div class="timeline-dot-indicator">
+                                    <div id="timeline-current-time" class="timeline-time-tooltip">--:--</div>
+                                </div>
                             </div>
                         </div>
                         <div class="timeline-nodes" style="height: 60px; position: relative;">
@@ -1065,13 +1095,13 @@
                             <div class="small fw-bold opacity-75" style="font-size: 0.65rem; letter-spacing: 0.05em;">
                                 BREAKS</div>
                             {% if assigned_shift.breaks.all %}
-                                {% for break_item in assigned_shift.breaks.all %}
-                                <div class="fw-bold text-white" style="font-size: 0.85rem;">
-                                    {{ break_item.name }}: 
-                                    {% if break_item.start_time %}{{ break_item.start_time|time:"H:i" }}{% else %}--:--{% endif %} - 
-                                    {% if break_item.end_time %}{{ break_item.end_time|time:"H:i" }}{% else %}--:--{% endif %}
-                                </div>
-                                {% endfor %}
+                            {% for break_item in assigned_shift.breaks.all %}
+                            <div class="fw-bold text-white" style="font-size: 0.85rem;">
+                                {{ break_item.name }}:
+                                {% if break_item.start_time %}{{ break_item.start_time|time:"H:i" }}{% else %}--:--{% endif %} -
+                                {% if break_item.end_time %}{{ break_item.end_time|time:"H:i" }}{% else %}--:--{% endif %}
+                            </div>
+                            {% endfor %}
                             {% else %}
                             <div class="fw-bold text-white opacity-75" style="font-size: 0.85rem;">No breaks configured
                             </div>
@@ -1464,16 +1494,20 @@
     {% if attendance.clock_in and not attendance.clock_out %}
     const dataEl = document.getElementById('page-context');
     const clockInTimeStr = dataEl?.dataset.clockIn || "";
-    // Parse Date safely (Safari/iOS compatibility often requires T or /)
-    // Assuming ISO format from Django often effectively works or use Date.parse
-    const clockInTime = new Date(clockInTimeStr.replace(' ', 'T'));
+    // Handle specific Python ISO format (no 'Z' sometimes) and timezone issues
+    const clockInTime = new Date(clockInTimeStr);
 
     function updateDuration() {
-        if (!clockInTime) return;
+        if (!clockInTime || isNaN(clockInTime.getTime())) return;
         const now = new Date();
         const diff = now - clockInTime; // milliseconds
 
-        if (diff < 0) return; // Should not happen with server time sync, but safe guard
+        if (diff < 0) {
+            // Clock drift or timezone mismatch; clamp to 0 
+            const timerEl = document.getElementById('timer-display');
+            if (timerEl) timerEl.innerText = "00:00:00";
+            return;
+        }
 
         const seconds = Math.floor((diff / 1000) % 60);
         const minutes = Math.floor((diff / (1000 * 60)) % 60);
@@ -1814,6 +1848,14 @@
 
         if (progressBar) {
             progressBar.style.width = percent + '%';
+        }
+
+        const timeBadge = document.getElementById('timeline-current-time');
+        if (timeBadge) {
+            const h = now.getHours();
+            const m = now.getMinutes();
+            const strTime = (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m);
+            timeBadge.innerText = strTime;
         }
     }
 
