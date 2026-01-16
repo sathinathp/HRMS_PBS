@@ -1,10 +1,8 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from .models import Location, LocationWeekOff, Company
+from .models import Location, LocationWeekOff, Company, Announcement
 from employees.models import Employee
-<<<<<<< Updated upstream
-=======
 from core.decorators import admin_required
 
 
@@ -108,7 +106,7 @@ def announcement_configuration(request):
             "company": company,
         },
     )
->>>>>>> Stashed changes
+
 
 
 @login_required
