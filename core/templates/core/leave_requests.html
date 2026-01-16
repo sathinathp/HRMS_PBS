@@ -192,6 +192,7 @@
         font-weight: 700;
         font-size: 20px;
         flex-shrink: 0;
+        overflow: hidden;
     }
 
     .employee-info {
@@ -601,10 +602,10 @@
                 <label class="form-label">Status</label>
                 <select name="status" class="form-select">
                     <option value="">All Status</option>
-                    <option value="PENDING" {% if status_filter == 'PENDING' %}selected{% endif %}>Pending</option>
-                    <option value="APPROVED" {% if status_filter == 'APPROVED' %}selected{% endif %}>Approved</option>
-                    <option value="REJECTED" {% if status_filter == 'REJECTED' %}selected{% endif %}>Rejected</option>
-                    <option value="CANCELLED" {% if status_filter == 'CANCELLED' %}selected{% endif %}>Cancelled</option>
+                    <option value="PENDING" {% if status_filter=='PENDING' %}selected{% endif %}>Pending</option>
+                    <option value="APPROVED" {% if status_filter=='APPROVED' %}selected{% endif %}>Approved</option>
+                    <option value="REJECTED" {% if status_filter=='REJECTED' %}selected{% endif %}>Rejected</option>
+                    <option value="CANCELLED" {% if status_filter=='CANCELLED' %}selected{% endif %}>Cancelled</option>
                 </select>
             </div>
             <div class="form-group">
@@ -617,7 +618,7 @@
                 <select name="department" class="form-select">
                     <option value="">All Departments</option>
                     {% for dept in departments %}
-                    <option value="{{ dept }}" {% if department_filter == dept %}selected{% endif %}>{{ dept }}</option>
+                    <option value="{{ dept }}" {% if department_filter==dept %}selected{% endif %}>{{ dept }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -625,12 +626,11 @@
                 <label class="form-label">Leave Type</label>
                 <select name="leave_type" class="form-select">
                     <option value="">All Types</option>
-                    <option value="CL" {% if leave_type_filter == 'CL' %}selected{% endif %}>Casual Leave</option>
-                    <option value="SL" {% if leave_type_filter == 'SL' %}selected{% endif %}>Sick Leave</option>
-                    <option value="EL" {% if leave_type_filter == 'EL' %}selected{% endif %}>Earned Leave</option>
-                    <option value="CO" {% if leave_type_filter == 'CO' %}selected{% endif %}>Comp Off</option>
-                    <option value="UL" {% if leave_type_filter == 'UL' %}selected{% endif %}>Unpaid Leave</option>
-                    <option value="OT" {% if leave_type_filter == 'OT' %}selected{% endif %}>Others</option>
+                    <option value="CL" {% if leave_type_filter=='CL' %}selected{% endif %}>Casual Leave</option>
+                    <option value="SL" {% if leave_type_filter=='SL' %}selected{% endif %}>Sick Leave</option>
+                    <option value="UL" {% if leave_type_filter=='UL' %}selected{% endif %}>Unpaid Leave (LOP)</option>
+                    <option value="OD" {% if leave_type_filter=='OD' %}selected{% endif %}>On Duty</option>
+                    <option value="OT" {% if leave_type_filter=='OT' %}selected{% endif %}>Others</option>
                 </select>
             </div>
             <div class="form-group">
@@ -650,7 +650,12 @@
         <div class="card-header">
             <div class="employee-section">
                 <div class="employee-avatar">
+                    {% if leave.employee.profile_picture %}
+                    <img src="{{ leave.employee.profile_picture.url }}" alt="{{ leave.employee.user.get_full_name }}"
+                        style="width: 100%; height: 100%; object-fit: cover;">
+                    {% else %}
                     {{ leave.employee.user.first_name.0 }}{{ leave.employee.user.last_name.0 }}
+                    {% endif %}
                 </div>
                 <div class="employee-info">
                     <h3 class="employee-name">{{ leave.employee.user.get_full_name }}</h3>
@@ -749,30 +754,20 @@
             <div class="balance-grid">
                 <div class="balance-item">
                     <div class="balance-label">CL</div>
-                    <div
-                        class="balance-value {% if leave.employee.leave_balance.casual_leave_balance >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
+                    <div class="balance-value balance-positive">
                         {{ leave.employee.leave_balance.casual_leave_balance }}
                     </div>
                 </div>
                 <div class="balance-item">
                     <div class="balance-label">SL</div>
-                    <div
-                        class="balance-value {% if leave.employee.leave_balance.sick_leave_balance >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
+                    <div class="balance-value balance-positive">
                         {{ leave.employee.leave_balance.sick_leave_balance }}
                     </div>
                 </div>
                 <div class="balance-item">
-                    <div class="balance-label">EL</div>
-                    <div
-                        class="balance-value {% if leave.employee.leave_balance.earned_leave_balance >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
-                        {{ leave.employee.leave_balance.earned_leave_balance }}
-                    </div>
-                </div>
-                <div class="balance-item">
-                    <div class="balance-label">Comp Off</div>
-                    <div
-                        class="balance-value {% if leave.employee.leave_balance.comp_off_balance >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
-                        {{ leave.employee.leave_balance.comp_off_balance }}
+                    <div class="balance-label">LOP</div>
+                    <div class="balance-value balance-negative">
+                        {{ leave.employee.leave_balance.unpaid_leave }}
                     </div>
                 </div>
             </div>
@@ -780,7 +775,7 @@
             {% if leave.is_negative_balance %}
             <div class="warning-banner">
                 <i class="fas fa-exclamation-triangle warning-icon"></i>
-                <p class="warning-text">Warning: Approving this leave will result in negative balance!</p>
+                <p class="warning-text">Note: Approving this leave will result in LOP (Loss of Pay)</p>
             </div>
             {% endif %}
         </div>
@@ -789,12 +784,12 @@
         {% if leave.status == 'PENDING' %}
         <div class="action-section">
             <button class="btn-keka btn-success-keka"
-                onclick="approveLeave({{ leave.id }}, '{{ leave.employee.user.get_full_name }}')">
+                onclick='approveLeave({{ leave.id }}, "{{ leave.employee.user.get_full_name|escapejs }}", {{ leave.is_negative_balance|yesno:"true,false" }})'>
                 <i class="fas fa-check-circle"></i>
                 Approve Leave
             </button>
             <button class="btn-keka btn-danger-keka"
-                onclick="rejectLeave({{ leave.id }}, '{{ leave.employee.user.get_full_name }}')">
+                onclick='rejectLeave({{ leave.id }}, "{{ leave.employee.user.get_full_name|escapejs }}")'>
                 <i class="fas fa-times-circle"></i>
                 Reject Leave
             </button>
@@ -809,6 +804,20 @@
                 <span class="approval-label">Action Date:</span>
                 <span class="approval-value">{{ leave.approved_at|date:"d M, Y H:i"|default:"N/A" }}</span>
             </div>
+            {% if leave.approval_type %}
+            <div class="approval-row">
+                <span class="approval-label">Approval Type:</span>
+                <span class="approval-value">
+                    {% if leave.approval_type == 'FULL' %}
+                        ✅ Full Balance
+                    {% elif leave.approval_type == 'WITH_LOP' %}
+                        ⚠️ With LOP
+                    {% elif leave.approval_type == 'ONLY_AVAILABLE' %}
+                        📊 Only Available Days
+                    {% endif %}
+                </span>
+            </div>
+            {% endif %}
             {% if leave.admin_comment %}
             <div class="approval-row">
                 <span class="approval-label">Comment:</span>
@@ -840,21 +849,44 @@
                 {% csrf_token %}
                 <input type="hidden" name="action" value="approve">
                 <input type="hidden" name="leave_id" id="approveLeaveId">
+                <input type="hidden" name="approval_type" id="approvalTypeInput" value="FULL">
+                
                 <div class="modal-body">
+                    <!-- Show approval options if insufficient balance -->
+                    <div id="approvalOptionsSection" style="display: none; margin-bottom: 20px;">
+                        <div class="alert alert-warning" style="background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                            <i class="fas fa-exclamation-triangle" style="color: #856404;"></i>
+                            <strong style="color: #856404;">⚠️ Insufficient Leave Balance</strong>
+                            <p style="margin: 8px 0 0 0; color: #856404; font-size: 14px;" id="balanceWarningText">
+                                This employee doesn't have enough leave balance. Choose how to proceed:
+                            </p>
+                        </div>
+                    </div>
+                    
                     <div class="form-group">
                         <label class="form-label">Admin Comment (Optional)</label>
                         <textarea name="admin_comment" class="form-control" rows="4"
                             placeholder="Add any remarks or notes..."></textarea>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer" style="display: flex; justify-content: space-between; gap: 8px;">
                     <button type="button" class="btn-keka btn-outline-keka" onclick="closeModal('approveModal')">
                         Cancel
                     </button>
-                    <button type="submit" class="btn-keka btn-success-keka">
-                        <i class="fas fa-check"></i>
-                        Confirm Approval
-                    </button>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn-keka btn-danger-keka" onclick="rejectFromApprovalModal()">
+                            <i class="fas fa-times"></i>
+                            Reject
+                        </button>
+                        <button type="button" class="btn-keka" style="background-color: #f59e0b; color: white;" id="approveOnlyAvailableBtn" onclick="approveWithType('ONLY_AVAILABLE')">
+                            <i class="fas fa-check-circle"></i>
+                            Approve (Only Available)
+                        </button>
+                        <button type="button" class="btn-keka btn-success-keka" onclick="approveWithType('WITH_LOP')">
+                            <i class="fas fa-check-double"></i>
+                            Approve with LOP
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -901,10 +933,79 @@
 </div>
 
 <script>
-    function approveLeave(leaveId, employeeName) {
+    let currentLeaveId = null;
+    let currentEmployeeName = null;
+    
+    function approveLeave(leaveId, employeeName, hasInsufficientBalance) {
+        currentLeaveId = leaveId;
+        currentEmployeeName = employeeName;
+        
         document.getElementById('approveLeaveId').value = leaveId;
         document.getElementById('approveEmployeeName').textContent = 'For: ' + employeeName;
+        
+        // Show/hide approval options based on balance
+        const approvalOptionsSection = document.getElementById('approvalOptionsSection');
+        const approveOnlyAvailableBtn = document.getElementById('approveOnlyAvailableBtn');
+        
+        if (hasInsufficientBalance) {
+            approvalOptionsSection.style.display = 'block';
+            // Show the "Approve (Only Available)" button
+            approveOnlyAvailableBtn.style.display = 'inline-flex';
+        } else {
+            approvalOptionsSection.style.display = 'none';
+            // Hide the "Approve (Only Available)" button when balance is sufficient
+            approveOnlyAvailableBtn.style.display = 'none';
+        }
+        
         document.getElementById('approveModal').style.display = 'block';
+    }
+    
+    function approveWithType(approvalType) {
+        // Set the approval type
+        document.getElementById('approvalTypeInput').value = approvalType;
+        
+        // Submit the form
+        const form = document.getElementById('approveForm');
+        const formData = new FormData(form);
+        const leaveId = currentLeaveId;
+        
+        // Create a form and submit it
+        const submitForm = document.createElement('form');
+        submitForm.method = 'POST';
+        submitForm.action = `/employees/leave/${leaveId}/approve/`;
+        
+        // Add CSRF token
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = formData.get('csrfmiddlewaretoken');
+        submitForm.appendChild(csrfInput);
+        
+        // Add approval type
+        const approvalTypeInput = document.createElement('input');
+        approvalTypeInput.type = 'hidden';
+        approvalTypeInput.name = 'approval_type';
+        approvalTypeInput.value = approvalType;
+        submitForm.appendChild(approvalTypeInput);
+        
+        // Add admin comment if provided
+        const adminComment = formData.get('admin_comment');
+        if (adminComment) {
+            const commentInput = document.createElement('input');
+            commentInput.type = 'hidden';
+            commentInput.name = 'admin_comment';
+            commentInput.value = adminComment;
+            submitForm.appendChild(commentInput);
+        }
+        
+        document.body.appendChild(submitForm);
+        submitForm.submit();
+    }
+    
+    function rejectFromApprovalModal() {
+        // Close approve modal and open reject modal
+        closeModal('approveModal');
+        rejectLeave(currentLeaveId, currentEmployeeName);
     }
 
     function rejectLeave(leaveId, employeeName) {
@@ -923,6 +1024,39 @@
             closeModal('approveModal');
             closeModal('rejectModal');
         }
+    });
+    
+    // Handle form submission for rejection
+    document.getElementById('rejectForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const leaveId = formData.get('leave_id');
+        
+        // Create a form and submit it
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/employees/leave/${leaveId}/reject/`;
+        
+        // Add CSRF token
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = formData.get('csrfmiddlewaretoken');
+        form.appendChild(csrfInput);
+        
+        // Add rejection reason
+        const rejectionReason = formData.get('admin_comment');
+        if (rejectionReason) {
+            const reasonInput = document.createElement('input');
+            reasonInput.type = 'hidden';
+            reasonInput.name = 'rejection_reason';
+            reasonInput.value = rejectionReason;
+            form.appendChild(reasonInput);
+        }
+        
+        document.body.appendChild(form);
+        form.submit();
     });
 </script>
 {% endblock %}

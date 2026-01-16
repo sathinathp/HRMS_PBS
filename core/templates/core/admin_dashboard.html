@@ -959,6 +959,48 @@
                 <div class="announcements-body" id="announcementsContent">
                     <!-- Dynamic Content Loaded Here -->
 
+<<<<<<< Updated upstream
+=======
+                    <!-- 0. Custom Announcements Content (NEW) -->
+                    <div id="tab-announcements" class="tab-content fade-in">
+                        {% if announcements %}
+                        {% for announcement in announcements %}
+                        <div class="announcement-item">
+                            <div class="announcement-icon" style="background: #dbeafe; color: #1e40af;">
+                                <i class="fas fa-bullhorn"></i>
+                            </div>
+                            <div class="announcement-details">
+                                <div class="announcement-text">{{ announcement.title }}</div>
+                                {% if announcement.image %}
+                                <div class="mb-2 mt-1">
+                                    <img src="{{ announcement.image.url }}" alt="{{ announcement.title }}"
+                                        class="img-fluid rounded" style="max-height: 150px; width: auto;">
+                                </div>
+                                {% endif %}
+                                <div class="announcement-subtext">
+                                    {{ announcement.content|truncatewords:20 }}
+                                    {% if announcement.location %}
+                                    <br><small class="text-primary"><i class="fas fa-map-marker-alt"></i> {{ announcement.location.name }}</small>
+                                    {% else %}
+                                    <br><small class="text-warning"><i class="fas fa-globe"></i> Company-wide</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="announcement-date">
+                                {{ announcement.created_at|date:"d M" }}
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% else %}
+                        <div class="empty-state">
+                            <i class="fas fa-bullhorn"></i>
+                            <p>No announcements yet</p>
+                            <small>Admins can create announcements in Configuration → Announcements</small>
+                        </div>
+                        {% endif %}
+                    </div>
+
+>>>>>>> Stashed changes
                     <!-- 1. Birthdays Content -->
                     <div id="tab-birthdays" class="tab-content fade-in">
                         {% if upcoming_birthdays %}

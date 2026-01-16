@@ -63,7 +63,7 @@ RUN chmod +x /docker-entrypoint.sh
 COPY --chown=app:app . .
 
 # Create necessary directories and set permissions
-RUN mkdir -p /app/staticfiles /app/mediafiles /app/_logs && \
+RUN mkdir -p /app/staticfiles /app/media /app/media/employee_avatars /app/_logs && \
     chown -R app:app /app
 
 USER app

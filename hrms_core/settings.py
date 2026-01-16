@@ -66,6 +66,8 @@ INSTALLED_APPS = [
     "core.apps.CoreConfig",  # Changed to use AppConfig for signal handling
     "superadmin",
     "ai_assistant",  # AI-powered features
+    "handbooks",  # Employee handbooks with location-based access
+    "policies",  # Company Policies
 ]
 
 AUTHENTICATION_BACKENDS = [
