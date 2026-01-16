@@ -276,15 +276,23 @@ def admin_dashboard(request):
             early_departures += 1
 
     # --- Department Performance Logic ---
-    # Get distinct departments present today
-    departments_list = list(set(employees.values_list("department", flat=True)))
-    # Remove None/empty values and sort
-    departments_list = sorted([dept for dept in departments_list if dept])
+    # Get distinct departments and normalize them (strip whitespace, handle case)
+    departments_raw = employees.values_list("department", flat=True).distinct()
+    departments_set = set()
+    
+    # Normalize and deduplicate departments
+    for dept in departments_raw:
+        if dept and dept.strip():
+            # Use stripped version for deduplication
+            departments_set.add(dept.strip())
+    
+    # Get sorted unique departments
+    departments_list = sorted(list(departments_set))
     
     department_performance = []
 
     for dept in departments_list:
-
+        # Filter employees by exact department match (case-sensitive after normalization)
         dept_emps = employees.filter(department=dept)
         dept_total = dept_emps.count()
 
