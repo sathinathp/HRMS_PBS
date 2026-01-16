@@ -35,6 +35,7 @@ def announcement_configuration(request):
             content = request.POST.get("content")
             location_id = request.POST.get("location")
             is_active = request.POST.get("is_active") == "on"
+            image = request.FILES.get("image")
 
             if title and content:
                 location = None
@@ -48,6 +49,7 @@ def announcement_configuration(request):
                     location=location,
                     title=title,
                     content=content,
+                    image=image,
                     is_active=is_active,
                 )
                 messages.success(request, f"Announcement '{title}' created successfully!")
@@ -69,6 +71,10 @@ def announcement_configuration(request):
                 else None
             )
             announcement.is_active = request.POST.get("is_active") == "on"
+            
+            if "image" in request.FILES:
+                announcement.image = request.FILES["image"]
+                
             announcement.save()
 
             messages.success(
@@ -100,6 +106,7 @@ def announcement_configuration(request):
             "company": company,
         },
     )
+
 
 
 @login_required
