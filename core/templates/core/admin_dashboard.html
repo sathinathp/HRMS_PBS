@@ -558,8 +558,9 @@
         transform: scale(1.1);
     }
 
-    .day-cell.wfh {
-        background: var(--keka-purple);
+    .day-cell.wfh,
+    .day-cell.present {
+        background: var(--keka-success);
         color: white;
     }
 
@@ -568,8 +569,10 @@
         color: white;
     }
 
-    .day-cell.paid-leave {
-        background: var(--keka-teal);
+    .day-cell.paid-leave,
+    .day-cell.sick-leave {
+        background: #f59e0b;
+        /* Amber/Orange for all leaves */
         color: white;
     }
 
@@ -580,17 +583,6 @@
 
     .day-cell.holiday {
         background: var(--keka-info);
-        color: white;
-    }
-
-    .day-cell.sick-leave {
-        background: #ec4899;
-        /* Pink/Reddish */
-        color: white;
-    }
-
-    .day-cell.present {
-        background: var(--keka-success);
         color: white;
     }
 
@@ -1375,16 +1367,16 @@
         <!-- Legend -->
         <div class="legend">
             <div class="legend-item">
-                <div class="legend-dot" style="background: var(--keka-purple);"></div>
-                <span>Work from home</span>
+                <div class="legend-dot" style="background: var(--keka-success);"></div>
+                <span>Present</span>
             </div>
             <div class="legend-item">
                 <div class="legend-dot" style="background: var(--keka-warning);"></div>
                 <span>Weekly off</span>
             </div>
             <div class="legend-item">
-                <div class="legend-dot" style="background: var(--keka-teal);"></div>
-                <span>Paid leave</span>
+                <div class="legend-dot" style="background: #f59e0b;"></div>
+                <span>Leave</span>
             </div>
             <div class="legend-item">
                 <div class="legend-dot" style="background: var(--keka-danger);"></div>
@@ -1393,14 +1385,6 @@
             <div class="legend-item">
                 <div class="legend-dot" style="background: var(--keka-info);"></div>
                 <span>Holiday</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-dot" style="background: #ec4899;"></div>
-                <span>Sick leave</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-dot" style="background: var(--keka-success);"></div>
-                <span>Present</span>
             </div>
         </div>
     </div>
