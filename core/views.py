@@ -276,20 +276,34 @@ def admin_dashboard(request):
             early_departures += 1
 
     # --- Department Performance Logic ---
-    # Get distinct departments present today
-    departments_list = employees.values_list("department", flat=True).distinct()
+    # Get distinct departments with improved deduplication
+    departments_raw = employees.values_list("department", flat=True).distinct()
+    departments_map = {}  # Maps normalized name to original names
+    
+    # Build mapping of normalized names to original names
+    for dept in departments_raw:
+        if dept and dept.strip():
+            normalized = dept.strip()
+            if normalized not in departments_map:
+                departments_map[normalized] = []
+            departments_map[normalized].append(dept)
+    
+    # Get sorted unique departments (normalized)
+    departments_list = sorted(departments_map.keys())
+    
     department_performance = []
 
-    for dept in departments_list:
-        if not dept:
-            continue
-
-        dept_emps = employees.filter(department=dept)
+    for normalized_dept in departments_list:
+        # Get all original department names that map to this normalized name
+        original_dept_names = departments_map[normalized_dept]
+        
+        # Filter employees by any of the original department names
+        dept_emps = employees.filter(department__in=original_dept_names)
         dept_total = dept_emps.count()
 
-        # Count present (any positive attendance status)
+        # Count present (any positive attendance status) using original names
         dept_present = today_attendance.filter(
-            employee__department=dept,
+            employee__department__in=original_dept_names,
             status__in=["PRESENT", "WFH", "ON_DUTY", "HALF_DAY"],
         ).count()
 
@@ -299,7 +313,7 @@ def admin_dashboard(request):
 
         department_performance.append(
             {
-                "name": dept,
+                "name": normalized_dept,
                 "present": dept_present,
                 "total": dept_total,
                 "percentage": round(percentage, 1),
@@ -504,7 +518,19 @@ def admin_dashboard(request):
 
     upcoming_anniversaries.sort(key=lambda x: x["days_left"])
 
-    # 3. Upcoming Holidays
+    # 3. Announcements
+    from companies.models import Announcement
+    
+    announcements = (
+        Announcement.objects.filter(
+            company=request.user.company,
+            is_active=True
+        )
+        .select_related("location")
+        .order_by("-created_at")[:10]
+    )
+
+    # 4. Upcoming Holidays
     # Using the Holiday model directly
     upcoming_holidays_qs = (
         Holiday.objects.filter(
@@ -531,6 +557,7 @@ def admin_dashboard(request):
         "work_from_office": work_from_office,
         "remote_clockins": remote_clockins,
         "pending_leave_requests": pending_leave_requests,
+        "announcements": announcements,
         "upcoming_birthdays": upcoming_birthdays,
         "upcoming_anniversaries": upcoming_anniversaries,
         "upcoming_holidays": upcoming_holidays_qs,
@@ -2418,7 +2445,7 @@ def leave_history(request):
     if request.user.role == User.Role.MANAGER:
         manager_profile = safe_get_employee_profile(request.user)
         if manager_profile:
-            employees = Employee.objects.filter(manager=manager_profile)
+            employees = Employee.objects.filter(manager=request.user)
         else:
             employees = Employee.objects.none()
 
