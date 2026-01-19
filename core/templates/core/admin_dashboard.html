@@ -560,8 +560,9 @@
 
     .day-cell.wfh,
     .day-cell.present {
-        background: var(--keka-success);
-        color: white;
+        background: transparent;
+        color: var(--keka-text-primary);
+        border: 1px solid #e5e7eb;
     }
 
     .day-cell.weekly-off {
@@ -571,13 +572,14 @@
 
     .day-cell.paid-leave,
     .day-cell.sick-leave {
-        background: #f59e0b;
-        /* Amber/Orange for all leaves */
+        background: #dc2626;
+        /* Red for all leaves */
         color: white;
     }
 
     .day-cell.no-attendance {
-        background: var(--keka-danger);
+        background: #7c3aed;
+        /* Purple for LOP */
         color: white;
     }
 
@@ -958,262 +960,8 @@
 {% endblock %}
 
 {% block content %}
-<div class="dashboard-header">
-    <h1 class="page-title">Today's Stats</h1>
-
-    <!-- Employee Search Bar -->
-    <div class="employee-search-container">
-        <div class="search-wrapper">
-            <i class="fas fa-search search-icon"></i>
-            <input type="text" id="employeeSearchInput" class="employee-search-input"
-                placeholder="Search employees by name or ID..." autocomplete="off">
-            <div id="searchResults" class="search-results" style="display: none;"></div>
-        </div>
-    </div>
-
-    <div class="filter-bar">
-        <select class="filter-select">
-            <option>All Departments</option>
-            {% for dept in departments %}
-            <option>{{ dept }}</option>
-            {% endfor %}
-        </select>
-        <select class="filter-select" onchange="window.location.href='?location=' + this.value">
-            <option value="">All Locations</option>
-            {% for loc in locations %}
-            <option value="{{ loc.id }}" {% if location_filter == loc.id %}selected{% endif %}>
-                {{ loc.name }}
-            </option>
-            {% endfor %}
-        </select>
-        <div class="auto-refresh">
-            <div class="refresh-indicator"></div>
-            <span>Auto-refreshing</span>
-        </div>
-    </div>
-</div>
-
 <div class="container-fluid px-4 pb-4">
-    <!-- Row 1: Insights & Announcements -->
-    <div class="row mb-4">
-        <!-- Today's Insights (Vertical Stack) -->
-        <div class="col-md-4">
-            <div class="keka-card h-100">
-                <div class="card-title-keka mb-4">
-                    <i class="fas fa-search me-2 text-primary"></i> Today's Insights
-                </div>
-                <div class="vstack gap-3">
-                    <!-- Late Arrivals -->
-                    <div class="p-3 rounded-3 d-flex justify-content-between align-items-center"
-                        style="background: #fffbeb; border: 1px solid #fef3c7;">
-                        <div>
-                            <div class="h3 fw-bold mb-1 text-warning">{{ late_arrivals }}</div>
-                            <div class="text-muted small fw-bold text-uppercase" style="font-size: 0.7rem;">Late
-                                Arrivals</div>
-                        </div>
-                        <div
-                            style="width: 40px; height: 40px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                            <i class="fas fa-running text-warning"></i>
-                        </div>
-                    </div>
-
-                    <!-- Early Departures -->
-                    <div class="p-3 rounded-3 d-flex justify-content-between align-items-center"
-                        style="background: #eff6ff; border: 1px solid #dbeafe;">
-                        <div>
-                            <div class="h3 fw-bold mb-1 text-primary">{{ early_departures }}</div>
-                            <div class="text-muted small fw-bold text-uppercase" style="font-size: 0.7rem;">Early
-                                Departures</div>
-                        </div>
-                        <div
-                            style="width: 40px; height: 40px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                            <i class="fas fa-sign-out-alt text-primary"></i>
-                        </div>
-                    </div>
-
-                    <!-- On Duty -->
-                    <div class="p-3 rounded-3 d-flex justify-content-between align-items-center"
-                        style="background: #ecfeff; border: 1px solid #cffafe;">
-                        <div>
-                            <div class="h3 fw-bold mb-1 text-info">{{ on_duty_count }}</div>
-                            <div class="text-muted small fw-bold text-uppercase" style="font-size: 0.7rem;">On Duty
-                            </div>
-                        </div>
-                        <div
-                            style="width: 40px; height: 40px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                            <i class="fas fa-briefcase text-info"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Announcements Widget -->
-        <div class="col-md-8">
-            <div class="announcements-card">
-                <div class="announcements-header">
-                    <h3 class="announcements-title"><i class="fas fa-bullhorn"></i> Announcements</h3>
-                    <div class="announcements-tabs">
-                        <button class="tab-btn active" onclick="switchTab('announcements')">Announcements</button>
-                        <button class="tab-btn" onclick="switchTab('birthdays')">Birthdays</button>
-                        <button class="tab-btn" onclick="switchTab('anniv')">Work Anniv.</button>
-                        <button class="tab-btn" onclick="switchTab('holidays')">Holidays</button>
-                    </div>
-                </div>
-
-                <div class="announcements-body" id="announcementsContent">
-                    <!-- 0. Custom Announcements Content -->
-                    <div id="tab-announcements" class="tab-content fade-in" style="height: 100%; min-height: 300px;">
-                        {% if announcements %}
-                        <div class="announcement-carousel h-100 position-relative p-4">
-                            {% for announcement in announcements %}
-                            <div class="announcement-slide {% if not forloop.first %}d-none{% endif %} fade-in h-100 d-flex flex-column"
-                                data-index="{{ forloop.counter0 }}">
-
-                                <div class="announcement-content-wrapper custom-scrollbar pe-2"
-                                    style="overflow-y: auto; flex: 1;">
-                                    <div class="d-flex align-items-start mb-4">
-                                        <div class="announcement-icon-lg me-3">
-                                            <i class="fas fa-bullhorn"></i>
-                                        </div>
-                                        <div>
-                                            <h4 class="announcement-title-large">{{ announcement.title }}</h4>
-                                            <div class="announcement-meta-row">
-                                                <span><i class="far fa-calendar-alt me-1"></i> {{ announcement.created_at|date:"d M Y" }}</span>
-                                                {% if announcement.location %}
-                                                <span class="text-primary bg-soft-primary px-2 py-1 rounded small"><i
-                                                        class="fas fa-map-marker-alt me-1"></i> {{ announcement.location.name }}</span>
-                                                {% else %}
-                                                <span class="text-warning bg-soft-warning px-2 py-1 rounded small"><i
-                                                        class="fas fa-globe me-1"></i> Global</span>
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {% if announcement.image %}
-                                    <div class="mb-3">
-                                        <img src="{{ announcement.image.url }}" alt="{{ announcement.title }}"
-                                            class="announcement-hero-image">
-                                    </div>
-                                    {% endif %}
-
-                                    <div class="announcement-body-text">
-                                        {{ announcement.content|linebreaksbr }}
-                                    </div>
-
-                                    <div class="mt-4 pt-3 border-top text-muted small d-flex align-items-center">
-                                        <i class="fas fa-pen-nib me-2"></i> Posted by {{ announcement.author.get_full_name|default:"Admin" }}
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-
-                            {% if announcements|length > 1 %}
-                            <button class="carousel-nav-btn" onclick="rotateAdminAnnouncement()"
-                                title="Next Announcement">
-                                <i class="fas fa-arrow-right"></i>
-                            </button>
-                            {% endif %}
-                        </div>
-                        {% else %}
-                        <div class="empty-state">
-                            <i class="fas fa-bullhorn"></i>
-                            <p>No announcements yet</p>
-                            <small>Admins can create announcements in Configuration → Announcements</small>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    <!-- 1. Birthdays Content -->
-                    <div id="tab-birthdays" class="tab-content fade-in" style="display: none;">
-                        {% if upcoming_birthdays %}
-                        {% for bday in upcoming_birthdays %}
-                        <div class="announcement-item">
-                            <div class="announcement-icon" style="background: #e0e7ff; color: #4338ca;">
-                                <i class="fas fa-birthday-cake"></i>
-                            </div>
-                            <div class="announcement-details">
-                                <div class="announcement-text">{{ bday.employee.user.get_full_name }}</div>
-                                <div class="announcement-subtext">
-                                    {% if bday.is_today %}
-                                    <span style="color: #16a34a; font-weight: bold;">Happy Birthday Today! 🎉</span>
-                                    {% else %}
-                                    Turning {{ bday.employee.age }} soon
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="announcement-date">
-                                {{ bday.display_date|date:"d M" }}
-                            </div>
-                        </div>
-                        {% endfor %}
-                        {% else %}
-                        <div class="empty-state">
-                            <i class="fas fa-birthday-cake"></i>
-                            <p>No upcoming birthdays</p>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    <!-- 2. Anniversaries Content -->
-                    <div id="tab-anniv" class="tab-content fade-in" style="display: none;">
-                        {% if upcoming_anniversaries %}
-                        {% for anniv in upcoming_anniversaries %}
-                        <div class="announcement-item">
-                            <div class="announcement-icon" style="background: #fef3c7; color: #d97706;">
-                                <i class="fas fa-medal"></i>
-                            </div>
-                            <div class="announcement-details">
-                                <div class="announcement-text">{{ anniv.employee.user.get_full_name }}</div>
-                                <div class="announcement-subtext">
-                                    Completing {{ anniv.years }} year{% if anniv.years > 1 %}s{% endif %}
-                                </div>
-                            </div>
-                            <div class="announcement-date">
-                                {{ anniv.date|date:"d M" }}
-                            </div>
-                        </div>
-                        {% endfor %}
-                        {% else %}
-                        <div class="empty-state">
-                            <i class="fas fa-award"></i>
-                            <p>No upcoming work anniversaries</p>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    <!-- 3. Holidays Content -->
-                    <div id="tab-holidays" class="tab-content fade-in" style="display: none;">
-                        {% if upcoming_holidays %}
-                        {% for holiday in upcoming_holidays %}
-                        <div class="announcement-item">
-                            <div class="announcement-icon" style="background: #d1fae5; color: #059669;">
-                                <i class="fas fa-umbrella-beach"></i>
-                            </div>
-                            <div class="announcement-details">
-                                <div class="announcement-text">{{ holiday.name }}</div>
-                                <div class="announcement-subtext">
-                                    {{ holiday.get_location_display }} • {{ holiday.get_holiday_type_display }}
-                                </div>
-                            </div>
-                            <div class="announcement-date">
-                                {{ holiday.date|date:"D, d M" }}
-                            </div>
-                        </div>
-                        {% endfor %}
-                        {% else %}
-                        <div class="empty-state">
-                            <i class="fas fa-umbrella-beach"></i>
-                            <p>No upcoming holidays</p>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Row 1 removed - Today's Stats section eliminated -->
 
     <!-- Row 2: Department Performance & Leave Requests -->
     <div class="row mb-4">
@@ -1367,7 +1115,7 @@
         <!-- Legend -->
         <div class="legend">
             <div class="legend-item">
-                <div class="legend-dot" style="background: var(--keka-success);"></div>
+                <div class="legend-dot" style="background: transparent; border: 1px solid #e5e7eb;"></div>
                 <span>Present</span>
             </div>
             <div class="legend-item">
@@ -1375,12 +1123,12 @@
                 <span>Weekly off</span>
             </div>
             <div class="legend-item">
-                <div class="legend-dot" style="background: #f59e0b;"></div>
+                <div class="legend-dot" style="background: #dc2626;"></div>
                 <span>Leave</span>
             </div>
             <div class="legend-item">
-                <div class="legend-dot" style="background: var(--keka-danger);"></div>
-                <span>No attendance</span>
+                <div class="legend-dot" style="background: #7c3aed;"></div>
+                <span>LOP</span>
             </div>
             <div class="legend-item">
                 <div class="legend-dot" style="background: var(--keka-info);"></div>
