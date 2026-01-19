@@ -1593,11 +1593,26 @@
             stopLocationWatch();
 
             if (!bestPosition) {
-                // If we have NO position after 3s, try one last check or fail
-                // For now, fail but arguably we could retry
+                // If we have NO position after timeout, offer fallback options
                 btn.innerHTML = origText;
                 btn.disabled = false;
-                alert("Could not acquire location signal. Please ensure GPS is enabled.");
+                
+                // Show user-friendly options instead of blocking them
+                const allowWithoutLocation = confirm(
+                    "Could not acquire location signal. This may be due to:\n" +
+                    "• GPS disabled on your device\n" +
+                    "• Poor GPS signal\n" +
+                    "• Browser location permissions denied\n\n" +
+                    "Would you like to proceed without location tracking?\n" +
+                    "(Your attendance will still be recorded, but without location data)"
+                );
+                
+                if (allowWithoutLocation) {
+                    // Proceed without location
+                    submitClockRequest(null);
+                } else {
+                    alert("Please enable GPS/location services and try again.");
+                }
                 return;
             }
 
@@ -1652,23 +1667,41 @@
                     stopLocationWatch();
                     btn.innerHTML = origText;
                     btn.disabled = false;
-                    alert("Location request denied. Attendance requires location access.");
+                    
+                    const allowWithoutLocation = confirm(
+                        "Location access was denied. This may be due to:\n" +
+                        "• Browser location permissions denied\n" +
+                        "• Privacy settings blocking location access\n\n" +
+                        "Would you like to proceed without location tracking?\n" +
+                        "(Your attendance will still be recorded, but without location data)"
+                    );
+                    
+                    if (allowWithoutLocation) {
+                        // Proceed without location
+                        submitClockRequest(null);
+                    } else {
+                        alert("Please enable location permissions in your browser and try again.");
+                    }
                 }
             },
             geoOptions
         );
 
         function submitClockRequest(pos) {
-            // Update status
-            const acc = Math.round(pos.coords.accuracy);
-            btn.innerHTML = `<span class="status-text me-2">Verifying (${acc}m)...</span> <i class="fas fa-spinner fa-spin"></i>`;
+            // Update status based on whether we have location or not
+            if (pos) {
+                const acc = Math.round(pos.coords.accuracy);
+                btn.innerHTML = `<span class="status-text me-2">Verifying (${acc}m)...</span> <i class="fas fa-spinner fa-spin"></i>`;
+            } else {
+                btn.innerHTML = `<span class="status-text me-2">Processing...</span> <i class="fas fa-spinner fa-spin"></i>`;
+            }
 
             const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
             const requestData = {
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude,
-                accuracy: pos.coords.accuracy, // Send accuracy to server
+                latitude: pos ? pos.coords.latitude : null,
+                longitude: pos ? pos.coords.longitude : null,
+                accuracy: pos ? pos.coords.accuracy : null,
                 type: type,
                 timezone: userTimezone
             };
