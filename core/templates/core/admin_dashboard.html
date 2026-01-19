@@ -1106,13 +1106,19 @@
                                 <i class="fas fa-birthday-cake"></i>
                             </div>
                             <div class="announcement-details">
-                                <div class="announcement-text">{{ birthday.user.get_full_name }}</div>
+                                <div class="announcement-text">{{ birthday.employee.user.get_full_name }}</div>
                                 <div class="announcement-subtext">
-                                    {{ birthday.designation }} • {{ birthday.department }}
+                                    {{ birthday.employee.designation|default:"N/A" }} • {{ birthday.employee.department|default:"N/A" }}
                                 </div>
                             </div>
                             <div class="announcement-date">
-                                {{ birthday.days_until_birthday }}
+                                {% if birthday.is_today %}
+                                    Today!
+                                {% elif birthday.days_left == 1 %}
+                                    Tomorrow
+                                {% else %}
+                                    in {{ birthday.days_left }} days
+                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}
@@ -1133,13 +1139,19 @@
                                 <i class="fas fa-award"></i>
                             </div>
                             <div class="announcement-details">
-                                <div class="announcement-text">{{ anniversary.user.get_full_name }}</div>
+                                <div class="announcement-text">{{ anniversary.employee.user.get_full_name }}</div>
                                 <div class="announcement-subtext">
-                                    {{ anniversary.designation }} • {{ anniversary.department }}
+                                    {{ anniversary.employee.designation|default:"N/A" }} • {{ anniversary.employee.department|default:"N/A" }} • {{ anniversary.years }} year{{ anniversary.years|pluralize }}
                                 </div>
                             </div>
                             <div class="announcement-date">
-                                {{ anniversary.days_until_anniversary }}
+                                {% if anniversary.is_today %}
+                                    Today!
+                                {% elif anniversary.days_left == 1 %}
+                                    Tomorrow
+                                {% else %}
+                                    in {{ anniversary.days_left }} days
+                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}

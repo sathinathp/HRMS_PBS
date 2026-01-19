@@ -735,8 +735,8 @@
                 {% endif %}
             </h4>
             
-            <!-- Employee Search Bar (only on admin dashboard) -->
-            {% if request.resolver_match.url_name == 'dashboard' %}
+            <!-- Employee Search Bar (for Company Admins on all pages) -->
+            {% if user.role == 'COMPANY_ADMIN' %}
             <div class="employee-search-container" style="position: relative;">
                 <i class="fas fa-search search-icon" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #6c7293; font-size: 14px;"></i>
                 <input type="text" id="employeeSearchInput" class="form-control" 
@@ -957,8 +957,8 @@
     {% include 'ai_assistant/floating_chatbot.html' %}
     {% endif %}
 
-    <!-- Employee Search Functionality (only on dashboard) -->
-    {% if request.resolver_match.url_name == 'dashboard' %}
+    <!-- Employee Search Functionality (for Company Admins on all pages) -->
+    {% if user.role == 'COMPANY_ADMIN' %}
     <script>
         // Employee Search Functionality
         let searchTimeout;
