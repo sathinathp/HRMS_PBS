@@ -153,6 +153,14 @@ class Employee(models.Model):
     )
     week_off_sunday = models.BooleanField(default=True, help_text="Sunday is week-off")
 
+    # Email Notification Tracking
+    last_birthday_email_year = models.IntegerField(
+        null=True, blank=True, help_text="Year of last sent birthday email"
+    )
+    last_anniversary_email_year = models.IntegerField(
+        null=True, blank=True, help_text="Year of last sent anniversary email"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
