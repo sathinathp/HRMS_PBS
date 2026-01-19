@@ -422,13 +422,31 @@ def admin_dashboard(request):
                     status_class = "no-attendance"
                 elif att.status == "HOLIDAY":
                     status_class = "holiday"
-                else:
+                elif att.status in ["PRESENT", "ON_DUTY", "HALF_DAY"]:
                     status_class = "present"
+                else:
+                    status_class = "present"  # Default for any other status with clock-in
             else:
+                # No attendance record - determine what it should be
                 if day_date > today:
                     status_class = "future"
                 else:
-                    status_class = "no-data"
+                    # Check if it's a holiday for this employee's location
+                    is_holiday = Holiday.objects.filter(
+                        company=emp.company,
+                        location=emp.location,
+                        date=day_date,
+                        is_active=True
+                    ).exists()
+                    
+                    if is_holiday:
+                        status_class = "holiday"
+                    # Check if it's a weekly off for this employee
+                    elif emp.is_week_off(day_date):
+                        status_class = "weekly-off"
+                    else:
+                        # No record and not holiday/weekoff = absent
+                        status_class = "no-attendance"
 
             emp_data["days"].append(
                 {"day": day, "status": status_class, "date": day_date}
