@@ -560,8 +560,9 @@
 
     .day-cell.wfh,
     .day-cell.present {
-        background: var(--keka-success);
-        color: white;
+        background: transparent;
+        color: var(--keka-text-primary);
+        border: 1px solid #e5e7eb;
     }
 
     .day-cell.weekly-off {
@@ -571,8 +572,8 @@
 
     .day-cell.paid-leave,
     .day-cell.sick-leave {
-        background: #f59e0b;
-        /* Amber/Orange for all leaves */
+        background: #dc2626;
+        /* Red for all leaves */
         color: white;
     }
 
@@ -1367,7 +1368,7 @@
         <!-- Legend -->
         <div class="legend">
             <div class="legend-item">
-                <div class="legend-dot" style="background: var(--keka-success);"></div>
+                <div class="legend-dot" style="background: transparent; border: 1px solid #e5e7eb;"></div>
                 <span>Present</span>
             </div>
             <div class="legend-item">
@@ -1375,7 +1376,7 @@
                 <span>Weekly off</span>
             </div>
             <div class="legend-item">
-                <div class="legend-dot" style="background: #f59e0b;"></div>
+                <div class="legend-dot" style="background: #dc2626;"></div>
                 <span>Leave</span>
             </div>
             <div class="legend-item">
