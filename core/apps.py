@@ -15,6 +15,10 @@ class CoreConfig(AppConfig):
                 from core.email_scheduler import email_scheduler
 
                 email_scheduler.start()
-                print("✅ Birthday/Anniversary email scheduler started automatically")
+                from loguru import logger
+
+                logger.info("[INFO] Birthday/Anniversary email scheduler started automatically")
             except Exception as e:
-                print(f"⚠️ Could not start email scheduler: {e}")
+                from loguru import logger
+
+                logger.warning(f"[WARN] Could not start email scheduler: {e}")

@@ -956,6 +956,66 @@
         background-color: #d1d5db;
         border-radius: 20px;
     }
+
+    .carousel-controls {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 16px;
+        margin-top: auto;
+        border-top: 1px solid var(--keka-border);
+    }
+
+    .carousel-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 1px solid var(--keka-border);
+        background: white;
+        color: var(--keka-text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .carousel-btn:hover {
+        background: var(--keka-primary);
+        color: white;
+        border-color: var(--keka-primary);
+        transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(91, 71, 251, 0.2);
+    }
+
+    .carousel-btn:active {
+        transform: scale(0.95);
+    }
+
+    .carousel-indicators {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .indicator {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #cbd5e1;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .indicator:hover {
+        background: var(--keka-purple);
+    }
+
+    .indicator.active {
+        background: var(--keka-primary);
+        width: 24px;
+        border-radius: 12px;
+    }
 </style>
 {% endblock %}
 
@@ -1113,11 +1173,11 @@
                             </div>
                             <div class="announcement-date">
                                 {% if birthday.is_today %}
-                                    Today!
+                                Today!
                                 {% elif birthday.days_left == 1 %}
-                                    Tomorrow
+                                Tomorrow
                                 {% else %}
-                                    in {{ birthday.days_left }} days
+                                in {{ birthday.days_left }} days
                                 {% endif %}
                             </div>
                         </div>
@@ -1146,11 +1206,11 @@
                             </div>
                             <div class="announcement-date">
                                 {% if anniversary.is_today %}
-                                    Today!
+                                Today!
                                 {% elif anniversary.days_left == 1 %}
-                                    Tomorrow
+                                Tomorrow
                                 {% else %}
-                                    in {{ anniversary.days_left }} days
+                                in {{ anniversary.days_left }} days
                                 {% endif %}
                             </div>
                         </div>
@@ -1577,21 +1637,54 @@
     // Auto-rotate tabs occasionally if user is idle? Maybe too distracting.
     // Let's keep it manual for now as requested "advance css js" implies sleekness not necessarily chaos.
 
-    // Announcement Carousel Logic for Admin Dashboard
-    let currentAdminAnnouncementIndex = 0;
-    function rotateAdminAnnouncement() {
-        const container = document.getElementById('tab-announcements');
-        const slides = container.querySelectorAll('.announcement-slide');
-        if (slides.length < 2) return;
+    // Announcement Carousel Logic
+    let currentAnnouncementIndex = 0;
 
-        // Hide current
-        slides[currentAdminAnnouncementIndex].classList.add('d-none');
+    function updateCarousel() {
+        const slides = document.querySelectorAll('.announcement-slide');
+        if (!slides.length) return;
 
-        // Next index
-        currentAdminAnnouncementIndex = (currentAdminAnnouncementIndex + 1) % slides.length;
+        slides.forEach((slide, index) => {
+            if (index === currentAnnouncementIndex) {
+                slide.classList.remove('d-none');
 
-        // Show next
-        slides[currentAdminAnnouncementIndex].classList.remove('d-none');
+                // Update indicators for this slide's control bar
+                const indicators = slide.querySelectorAll('.indicator');
+                indicators.forEach((ind, i) => {
+                    if (i === currentAnnouncementIndex) {
+                        ind.classList.add('active');
+                    } else {
+                        ind.classList.remove('active');
+                    }
+                });
+            } else {
+                slide.classList.add('d-none');
+            }
+        });
     }
+
+    function nextAnnouncement() {
+        const slides = document.querySelectorAll('.announcement-slide');
+        if (!slides.length) return;
+
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % slides.length;
+        updateCarousel();
+    }
+
+    function previousAnnouncement() {
+        const slides = document.querySelectorAll('.announcement-slide');
+        if (!slides.length) return;
+
+        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + slides.length) % slides.length;
+        updateCarousel();
+    }
+
+    // Optional: Auto-rotate specific logic if needed, but manual control is often preferred for announcements
+    // function autoRotateAnnouncements() {
+    //     setInterval(() => {
+    //         nextAnnouncement();
+    //     }, 5000);
+    // }
+
 </script>
 {% endblock %}

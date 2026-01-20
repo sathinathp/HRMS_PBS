@@ -1,45 +1,48 @@
-from django.conf import settings
-from django.shortcuts import render
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView, FormView
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.urls import reverse_lazy, reverse
-from django.db import transaction
+import json
 from datetime import timedelta
-from .models import (
-    Employee,
-    Attendance,
-    AttendanceSession,
-    LocationLog,
-    LeaveRequest,
-    LeaveBalance,
-    RegularizationRequest,
+
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.db import transaction
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.urls import reverse, reverse_lazy
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import CreateView, DeleteView, FormView, ListView, UpdateView
+from loguru import logger
+from timezonefinder import TimezoneFinder
+
+from accounts.models import User
+from core.error_handling import (
+    capture_exception,
+    safe_get_employee_profile,
+    safe_parse_location,
+    safe_queryset_filter,
 )
+
 from .forms import (
-    EmployeeCreationForm,
-    LeaveApplicationForm,
-    EmployeeUpdateForm,
     EmployeeBulkImportForm,
+    EmployeeCreationForm,
+    EmployeeUpdateForm,
+    LeaveApplicationForm,
     RegularizationRequestForm,
 )
-from accounts.models import User
-from django.http import JsonResponse
-from django.utils import timezone
-import json
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from timezonefinder import TimezoneFinder
-from loguru import logger
-from core.error_handling import (
-    safe_get_employee_profile,
-    safe_queryset_filter,
-    safe_parse_location,
-    capture_exception,
-)
 from .location_tracking_views import (
-    submit_hourly_location,
-    get_location_tracking_status,
     get_employee_location_history,
+    get_location_tracking_status,
+    submit_hourly_location,
+)
+from .models import (
+    Attendance,
+    AttendanceSession,
+    Employee,
+    LeaveBalance,
+    LeaveRequest,
+    LocationLog,
+    RegularizationRequest,
 )
 
 
@@ -185,27 +188,17 @@ class EmployeeUpdateView(LoginRequiredMixin, CompanyAdminRequiredMixin, UpdateVi
                 break
 
             name = self.request.POST.get(name_key, "").strip()
-            phone = self.request.POST.get(
-                f"emergency_contact_phone_{contact_index}", ""
-            ).strip()
-            relationship = self.request.POST.get(
-                f"emergency_contact_relationship_{contact_index}", ""
-            ).strip()
-            is_primary = (
-                f"emergency_contact_primary_{contact_index}" in self.request.POST
-            )
-            contact_id = self.request.POST.get(
-                f"emergency_contact_id_{contact_index}", ""
-            ).strip()
+            phone = self.request.POST.get(f"emergency_contact_phone_{contact_index}", "").strip()
+            relationship = self.request.POST.get(f"emergency_contact_relationship_{contact_index}", "").strip()
+            is_primary = f"emergency_contact_primary_{contact_index}" in self.request.POST
+            contact_id = self.request.POST.get(f"emergency_contact_id_{contact_index}", "").strip()
 
             # Only process if at least name and phone are provided
             if name and phone:
                 if contact_id:
                     # Update existing contact
                     try:
-                        contact = EmergencyContact.objects.get(
-                            id=contact_id, employee=employee
-                        )
+                        contact = EmergencyContact.objects.get(id=contact_id, employee=employee)
                         contact.name = name
                         contact.phone_number = phone
                         contact.relationship = relationship
@@ -232,9 +225,7 @@ class EmployeeUpdateView(LoginRequiredMixin, CompanyAdminRequiredMixin, UpdateVi
             if key.startswith("emergency_contact_delete_"):
                 contact_id = key.replace("emergency_contact_delete_", "")
                 try:
-                    EmergencyContact.objects.filter(
-                        id=contact_id, employee=employee
-                    ).delete()
+                    EmergencyContact.objects.filter(id=contact_id, employee=employee).delete()
                 except Exception as e:
                     logger.warning(
                         "Failed to delete emergency contact",
@@ -268,8 +259,8 @@ class EmployeeDeleteView(LoginRequiredMixin, CompanyAdminRequiredMixin, DeleteVi
         Perform complete permanent deletion of employee and all related data.
         This mimics Keka's permanent delete functionality.
         """
-        from django.shortcuts import redirect
         from django.contrib import messages
+        from django.shortcuts import redirect
 
         employee = self.get_object()
         employee_name = employee.user.get_full_name() if employee.user else "Employee"
@@ -365,9 +356,7 @@ def resend_welcome_email(request, pk):
         if send_welcome_email_with_link(employee, domain):
             messages.success(request, f"Welcome email resent to {employee.user.email}")
         else:
-            messages.error(
-                request, "Failed to send email. Please check email settings."
-            )
+            messages.error(request, "Failed to send email. Please check email settings.")
 
     except Employee.DoesNotExist:
         messages.error(request, "Employee not found.")
@@ -392,10 +381,7 @@ def clock_in(request):
             # Ensure employee profile exists
             if not hasattr(request.user, "employee_profile"):
                 # Auto-create for Company Admin to prevent setup deadlock
-                if (
-                    request.user.role == User.Role.COMPANY_ADMIN
-                    and request.user.company
-                ):
+                if request.user.role == User.Role.COMPANY_ADMIN and request.user.company:
                     from .models import Employee
 
                     try:
@@ -525,17 +511,13 @@ def clock_in(request):
                             attendance_session=session,
                             latitude=lat,
                             longitude=lng,
-                            accuracy=accuracy
-                            if accuracy is not None
-                            else 9999,  # Use high value for unknown accuracy
+                            accuracy=accuracy if accuracy is not None else 9999,  # Use high value for unknown accuracy
                             log_type="CLOCK_IN",
                             is_valid=True,
                         )
                     else:
                         # Log with null coordinates to track that location was unavailable
-                        logger.warning(
-                            f"Clock-in without location data for {employee.user.get_full_name()}"
-                        )
+                        logger.warning(f"Clock-in without location data for {employee.user.get_full_name()}")
 
                     # Update attendance record
                     attendance.daily_sessions_count = session_number
@@ -546,30 +528,22 @@ def clock_in(request):
                     # Set first clock-in of the day
                     if not attendance.clock_in:
                         attendance.clock_in = session.clock_in
-                        attendance.location_in = (
-                            f"{lat},{lng}"
-                            if lat is not None and lng is not None
-                            else "N/A"
-                        )
+                        attendance.location_in = f"{lat},{lng}" if lat is not None and lng is not None else "N/A"
 
                     # Determine overall status
                     if session_number == 1:
-                        attendance.status = (
-                            "WFH" if session_type == "REMOTE" else "PRESENT"
-                        )
+                        attendance.status = "WFH" if session_type == "REMOTE" else "PRESENT"
                     else:
                         # Multiple sessions - check if mixed types
                         session_types = set(
-                            AttendanceSession.objects.filter(
-                                employee=employee, date=today
-                            ).values_list("session_type", flat=True)
+                            AttendanceSession.objects.filter(employee=employee, date=today).values_list(
+                                "session_type", flat=True
+                            )
                         )
                         if len(session_types) > 1:
                             attendance.status = "HYBRID"
                         else:
-                            attendance.status = (
-                                "WFH" if session_type == "REMOTE" else "PRESENT"
-                            )
+                            attendance.status = "WFH" if session_type == "REMOTE" else "PRESENT"
 
                     # Start location tracking
                     attendance.location_tracking_active = True
@@ -589,16 +563,12 @@ def clock_in(request):
                                 s_end += timedelta(days=1)
                             shift_duration = s_end - s_start
 
-                        attendance.location_tracking_end_time = (
-                            session.clock_in + shift_duration
-                        )
+                        attendance.location_tracking_end_time = session.clock_in + shift_duration
                     else:
                         # Default to 9 hours if no shift assigned
                         from datetime import timedelta
 
-                        attendance.location_tracking_end_time = (
-                            session.clock_in + timedelta(hours=9)
-                        )
+                        attendance.location_tracking_end_time = session.clock_in + timedelta(hours=9)
 
                     # Calculate late arrival for first session only
                     if session_number == 1:
@@ -640,21 +610,15 @@ def clock_in(request):
                             s_end += timedelta(days=1)
                         shift_duration = s_end - s_start
 
-                    attendance.location_tracking_end_time = (
-                        session.clock_in + shift_duration
-                    )
+                    attendance.location_tracking_end_time = session.clock_in + shift_duration
                 except Exception as e:
-                    logger.warning(
-                        f"Error calculating shift duration for {employee}: {e}.Using default 9h."
-                    )
+                    logger.warning(f"Error calculating shift duration for {employee}: {e}.Using default 9h.")
 
-            if not attendance.location_tracking_end_time:
-                # Default to 9 hours if no shift assigned or error occurred
-                from datetime import timedelta
-
-                attendance.location_tracking_end_time = session.clock_in + timedelta(
-                    hours=9
-                )
+            # Removed 9-hour default tracking limit
+            # if not attendance.location_tracking_end_time:
+            #     # Default to 9 hours if no shift assigned or error occurred
+            #     from datetime import timedelta
+            #     attendance.location_tracking_end_time = session.clock_in + timedelta(hours=9)
 
             # Calculate late arrival for first session only
             if session_number == 1:
@@ -679,7 +643,7 @@ def clock_in(request):
 
             logger = logging.getLogger(__name__)
             logger.error(f"Clock-in error: {str(e)}", exc_info=True)
-            print(f"Clock-in error: {str(e)}")
+            # print(f"Clock-in error: {str(e)}")
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
     return JsonResponse({"status": "error", "message": "Invalid method"}, status=405)
@@ -719,15 +683,9 @@ def clock_out(request):
 
                 # Get current active session
                 current_session = attendance.get_current_session()
-                print(f"DEBUG: Clock-out attempt by {employee.user.get_full_name()}")
-                print(
-                    f"DEBUG: Attendance is_currently_clocked_in: {attendance.is_currently_clocked_in}"
-                )
-                print(f"DEBUG: Current session found: {current_session}")
-                if current_session:
-                    print(
-                        f"DEBUG: Session details - Number: {current_session.session_number}, Type: {current_session.session_type}"
-                    )
+                # DEBUG logging removed
+                # if current_session:
+                #     pass
 
                 if not current_session:
                     return JsonResponse(
@@ -739,9 +697,7 @@ def clock_out(request):
 
                 # Check if shift is complete (unless forced)
                 if not force_clockout and current_session.clock_in:
-                    worked_hours = (
-                        timezone.now() - current_session.clock_in
-                    ).total_seconds() / 3600
+                    worked_hours = (timezone.now() - current_session.clock_in).total_seconds() / 3600
                     expected_hours = 9.0  # Default 9 hours shift
 
                     if worked_hours < expected_hours:
@@ -755,9 +711,7 @@ def clock_out(request):
                                 "message": f"Your {int(expected_hours)}-hour shift is not completed yet. Do you want to clock out?",
                                 "worked_hours": round(worked_hours, 1),
                                 "expected_hours": round(expected_hours, 1),
-                                "completion_percentage": round(
-                                    completion_percentage, 1
-                                ),
+                                "completion_percentage": round(completion_percentage, 1),
                                 "remaining_hours": round(remaining_hours, 1),
                             }
                         )
@@ -776,27 +730,19 @@ def clock_out(request):
                         attendance_session=current_session,
                         latitude=lat,
                         longitude=lng,
-                        accuracy=accuracy
-                        if accuracy is not None
-                        else 9999,  # Use high value for unknown accuracy
+                        accuracy=accuracy if accuracy is not None else 9999,  # Use high value for unknown accuracy
                         log_type="CLOCK_OUT",
                         is_valid=True,
                     )
                 else:
                     # Log that location was unavailable
-                    logger.warning(
-                        f"Clock-out without location data for {employee.user.get_full_name()}"
-                    )
+                    logger.warning(f"Clock-out without location data for {employee.user.get_full_name()}")
 
                 # Update attendance record
                 attendance.is_currently_clocked_in = False
                 attendance.current_session_type = None
-                attendance.clock_out = (
-                    current_session.clock_out
-                )  # Update last clock-out
-                attendance.location_out = (
-                    f"{lat},{lng}" if lat is not None and lng is not None else "N/A"
-                )
+                attendance.clock_out = current_session.clock_out  # Update last clock-out
+                attendance.location_out = f"{lat},{lng}" if lat is not None and lng is not None else "N/A"
 
                 # Stop location tracking
                 attendance.location_tracking_active = False
@@ -812,12 +758,9 @@ def clock_out(request):
                         "session_number": current_session.session_number,
                         "session_type": current_session.session_type,
                         "session_duration": current_session.duration_hours,
-                        "clock_out_time": current_session.clock_out.strftime(
-                            "%H:%M:%S"
-                        ),
+                        "clock_out_time": current_session.clock_out.strftime("%H:%M:%S"),
                         "total_working_hours": attendance.total_working_hours,
-                        "sessions_remaining": attendance.max_daily_sessions
-                        - attendance.daily_sessions_count,
+                        "sessions_remaining": attendance.max_daily_sessions - attendance.daily_sessions_count,
                     }
                 )
 
@@ -876,16 +819,12 @@ def update_location(request):
     Accepts POST JSON with either 'location_id' to set location, or 'latitude'/'longitude' to log coordinates.
     """
     if request.method != "POST":
-        return JsonResponse(
-            {"status": "error", "message": "Invalid method"}, status=405
-        )
+        return JsonResponse({"status": "error", "message": "Invalid method"}, status=405)
     try:
         data = json.loads(request.body)
         # Ensure employee profile exists
         if not hasattr(request.user, "employee_profile"):
-            return JsonResponse(
-                {"status": "error", "message": "No employee profile found"}, status=400
-            )
+            return JsonResponse({"status": "error", "message": "No employee profile found"}, status=400)
         employee = request.user.employee_profile
 
         # Update location if provided
@@ -894,18 +833,12 @@ def update_location(request):
             from companies.models import Location
 
             try:
-                location = Location.objects.get(
-                    id=location_id, company=employee.company
-                )
+                location = Location.objects.get(id=location_id, company=employee.company)
                 employee.location = location
                 employee.save()
-                return JsonResponse(
-                    {"status": "success", "message": "Location updated"}
-                )
+                return JsonResponse({"status": "success", "message": "Location updated"})
             except Location.DoesNotExist:
-                return JsonResponse(
-                    {"status": "error", "message": "Location not found"}, status=404
-                )
+                return JsonResponse({"status": "error", "message": "Location not found"}, status=404)
 
         # Otherwise log latitude/longitude (only if tracking is active)
         lat = data.get("latitude")
@@ -939,34 +872,9 @@ def update_location(request):
                         }
                     )
 
-                # Check if shift is complete (9 hours)
+                # Log location for current session (Removed auto-clockout as per requirement)
                 if current_session.clock_in:
-                    session_duration = timezone.now() - current_session.clock_in
-                    # Auto-stop after 9 hours (Exact shift duration)
-                    if session_duration.total_seconds() >= 9 * 3600:
-                        # Perform auto clock-out
-                        if perform_auto_clock_out(
-                            attendance, current_session, lat, lng
-                        ):
-                            return JsonResponse(
-                                {
-                                    "status": "shift_completed",
-                                    "message": "Shift completed (9 hours). Auto clocked out.",
-                                    "location_tracking_active": False,
-                                    "clock_out_performed": True,
-                                }
-                            )
-                        else:
-                            # Fallback if auto-clockout fails, just stop tracking
-                            attendance.location_tracking_active = False
-                            attendance.save()
-                            return JsonResponse(
-                                {
-                                    "status": "tracking_stopped",
-                                    "message": "Shift time exceeded. Tracking stopped.",
-                                    "location_tracking_active": False,
-                                }
-                            )
+                    pass  # Keep the clock_in check if needed for other logic, but removed the 9-hour constraint
 
                 # Log location for current session
                 if attendance.location_tracking_active:
@@ -989,9 +897,7 @@ def update_location(request):
 
                     if is_accurate:
                         # Also create general location log for backward compatibility
-                        LocationLog.objects.create(
-                            employee=employee, latitude=str(lat), longitude=str(lng)
-                        )
+                        LocationLog.objects.create(employee=employee, latitude=str(lat), longitude=str(lng))
 
                     # Prepare response
                     response_data = {
@@ -1036,9 +942,7 @@ def update_location(request):
                 )
 
         # Return 200 even if no data to prevent log spam
-        return JsonResponse(
-            {"status": "ignored", "message": "No valid data provided"}, status=200
-        )
+        return JsonResponse({"status": "ignored", "message": "No valid data provided"}, status=200)
     except Exception as e:
         import logging
 
@@ -1048,6 +952,7 @@ def update_location(request):
 
 
 from django.shortcuts import redirect
+
 from .models import EmployeeIDProof
 
 
@@ -1065,9 +970,7 @@ def employee_profile(request):
             employee = Employee.objects.create(
                 user=user,
                 company=user.company,
-                designation="Administrator"
-                if user.role == User.Role.COMPANY_ADMIN
-                else "Employee",
+                designation="Administrator" if user.role == User.Role.COMPANY_ADMIN else "Employee",
                 department="Management",
                 badge_id=f"ADM{user.id}",  # Simple fallback ID
             )
@@ -1087,6 +990,66 @@ def employee_profile(request):
     locations = employee.company.locations.all()
 
     if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "update_profile":
+            if employee.profile_edited:
+                from django.contrib import messages
+
+                messages.error(request, "You have already edited your profile once.")
+                return redirect("employee_profile")
+
+            try:
+                # Personal Details
+                employee.mobile_number = request.POST.get("mobile_number")
+                dob_str = request.POST.get("dob")
+                if dob_str:
+                    employee.dob = dob_str
+                employee.gender = request.POST.get("gender")
+                employee.marital_status = request.POST.get("marital_status")
+
+                # Address Book
+                employee.current_address = request.POST.get("current_address")
+                employee.permanent_address = request.POST.get("permanent_address")
+
+                employee.save()
+
+                # Emergency Contacts - Clear existing and add new
+                from .models import EmergencyContact
+
+                employee.emergency_contacts.all().delete()
+
+                # Contact 1
+                c1_name = request.POST.get("contact_name_1")
+                c1_phone = request.POST.get("contact_phone_1")
+                c1_rel = request.POST.get("contact_rel_1")
+                if c1_name and c1_phone:
+                    EmergencyContact.objects.create(
+                        employee=employee, name=c1_name, phone_number=c1_phone, relationship=c1_rel, is_primary=True
+                    )
+
+                # Contact 2
+                c2_name = request.POST.get("contact_name_2")
+                c2_phone = request.POST.get("contact_phone_2")
+                c2_rel = request.POST.get("contact_rel_2")
+                if c2_name and c2_phone:
+                    EmergencyContact.objects.create(
+                        employee=employee, name=c2_name, phone_number=c2_phone, relationship=c2_rel, is_primary=False
+                    )
+
+                employee.profile_edited = True
+                employee.save(update_fields=["profile_edited"])
+
+                from django.contrib import messages
+
+                messages.success(request, "Profile updated successfully.")
+                return redirect("employee_profile")
+            except Exception as e:
+                from django.contrib import messages
+
+                messages.error(request, f"Error updating profile: {str(e)}")
+                return redirect("employee_profile")
+
         # Handle Profile Picture Upload
         if "profile_picture" in request.FILES:
             employee.profile_picture = request.FILES["profile_picture"]
@@ -1132,9 +1095,7 @@ def employee_profile(request):
         return redirect("employee_profile")
 
     # Get emergency contacts for this employee
-    emergency_contacts = employee.emergency_contacts.all().order_by(
-        "-is_primary", "created_at"
-    )
+    emergency_contacts = employee.emergency_contacts.all().order_by("-is_primary", "created_at")
 
     return render(
         request,
@@ -1210,8 +1171,9 @@ class LeaveApplyView(LoginRequiredMixin, CreateView):
         form.instance.employee = employee
 
         # Server-side duplicate prevention: Check for recent duplicate submissions
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         recent_duplicate = LeaveRequest.objects.filter(
             employee=employee,
@@ -1245,11 +1207,7 @@ class LeaveApplyView(LoginRequiredMixin, CreateView):
         validation = temp_leave_request.validate_leave_application()
 
         # If validation shows issues and user hasn't confirmed, ask for confirmation
-        if (
-            validation.get("will_be_lop", False)
-            and form.cleaned_data["leave_type"] != "UL"
-            and not confirm_lop
-        ):
+        if validation.get("will_be_lop", False) and form.cleaned_data["leave_type"] != "UL" and not confirm_lop:
             from django.contrib import messages
 
             messages.error(
@@ -1259,16 +1217,11 @@ class LeaveApplyView(LoginRequiredMixin, CreateView):
 
             # Return form with validation warning for user confirmation
             return self.render_to_response(
-                self.get_context_data(
-                    form=form, validation_warning=validation, show_confirmation=True
-                )
+                self.get_context_data(form=form, validation_warning=validation, show_confirmation=True)
             )
 
         # Add a comment to the leave request if it involves LOP
-        if (
-            validation.get("will_be_lop", False)
-            and form.cleaned_data["leave_type"] != "UL"
-        ):
+        if validation.get("will_be_lop", False) and form.cleaned_data["leave_type"] != "UL":
             original_reason = form.cleaned_data.get("reason", "")
             lop_note = f"\n\n[System Note: This application involves {validation.get('shortfall', 0)} days of LOP due to insufficient balance. Available: {validation.get('available_balance', 0)} days, Requested: {validation.get('requested_days', 0)} days]"
             form.instance.reason = original_reason + lop_note
@@ -1281,15 +1234,14 @@ class LeaveApplyView(LoginRequiredMixin, CreateView):
 
         def send_email_async():
             try:
-                from core.email_utils import send_leave_request_notification
                 import logging
+
+                from core.email_utils import send_leave_request_notification
 
                 logger = logging.getLogger(__name__)
                 result = send_leave_request_notification(self.object)
                 if not result.get("hr", False):
-                    logger.error(
-                        f"Failed to send leave request email to HR for {self.object.id}"
-                    )
+                    logger.error(f"Failed to send leave request email to HR for {self.object.id}")
             except Exception as e:
                 import logging
 
@@ -1368,15 +1320,11 @@ def approve_leave(request, pk):
         user = request.user
         is_admin = user.role == User.Role.COMPANY_ADMIN or user.is_superuser
         is_manager = (
-            user.role == User.Role.MANAGER
-            and leave_request.employee.manager
-            and leave_request.employee.manager.user == user
+            user.role == User.Role.MANAGER and leave_request.employee.manager and leave_request.employee.manager == user
         )
 
         if not (is_admin or is_manager):
-            return JsonResponse(
-                {"status": "error", "message": "Permission denied"}, status=403
-            )
+            return JsonResponse({"status": "error", "message": "Permission denied"}, status=403)
 
         # Get approval type from POST data
         approval_type = request.POST.get("approval_type", "FULL")
@@ -1409,9 +1357,7 @@ def approve_leave(request, pk):
                     if days_from_start < available_days:
                         att_record.status = "LEAVE"
                     else:
-                        att_record.status = (
-                            "LEAVE"  # Still mark as leave, LOP tracked in balance
-                        )
+                        att_record.status = "LEAVE"  # Still mark as leave, LOP tracked in balance
                 else:
                     att_record.status = "LEAVE"
 
@@ -1423,8 +1369,9 @@ def approve_leave(request, pk):
 
             def send_email_async():
                 try:
-                    from core.email_utils import send_leave_approval_notification
                     import logging
+
+                    from core.email_utils import send_leave_approval_notification
 
                     logger = logging.getLogger(__name__)
                     if not send_leave_approval_notification(leave_request):
@@ -1465,15 +1412,11 @@ def reject_leave(request, pk):
         user = request.user
         is_admin = user.role == User.Role.COMPANY_ADMIN or user.is_superuser
         is_manager = (
-            user.role == User.Role.MANAGER
-            and leave_request.employee.manager
-            and leave_request.employee.manager.user == user
+            user.role == User.Role.MANAGER and leave_request.employee.manager and leave_request.employee.manager == user
         )
 
         if not (is_admin or is_manager):
-            return JsonResponse(
-                {"status": "error", "message": "Permission denied"}, status=403
-            )
+            return JsonResponse({"status": "error", "message": "Permission denied"}, status=403)
 
         leave_request.status = "REJECTED"
         leave_request.rejection_reason = request.POST.get("rejection_reason", "")
@@ -1486,8 +1429,9 @@ def reject_leave(request, pk):
 
         def send_email_async():
             try:
-                from core.email_utils import send_leave_rejection_notification
                 import logging
+
+                from core.email_utils import send_leave_rejection_notification
 
                 logger = logging.getLogger(__name__)
                 if not send_leave_rejection_notification(leave_request):
@@ -1518,11 +1462,7 @@ def attendance_map(request, pk):
         # Permission Check
         user = request.user
         is_admin = user.role == User.Role.COMPANY_ADMIN or user.is_superuser
-        is_manager = (
-            user.role == User.Role.MANAGER
-            and employee.manager
-            and employee.manager.user == user
-        )
+        is_manager = user.role == User.Role.MANAGER and employee.manager and employee.manager == user
         is_self = user == employee.user
 
         if not (is_admin or is_manager or is_self):
@@ -1556,23 +1496,8 @@ def attendance_map(request, pk):
                     }
                 )
 
-        # Filter logs to show only hourly points (approx)
-        filtered_logs = []
-        if logs:
-            last_added_time = None
-            for log in logs:
-                if last_added_time is None:
-                    filtered_logs.append(log)
-                    last_added_time = log.timestamp
-                else:
-                    diff = log.timestamp - last_added_time
-                    # Only show if > 50 mins apart to satisfying "Every 1 Hour" request
-                    if diff.total_seconds() >= 3000: 
-                        filtered_logs.append(log)
-                        last_added_time = log.timestamp
-
         # 2. Logs
-        for log in filtered_logs:
+        for log in logs:
             map_locations.append(
                 {
                     "lat": float(log.latitude),
@@ -1618,11 +1543,7 @@ def employee_detail(request, pk):
         # Permission Check (Company Admin or Manager of the employee)
         user = request.user
         is_admin = user.role == User.Role.COMPANY_ADMIN or user.is_superuser
-        is_manager = (
-            user.role == User.Role.MANAGER
-            and employee.manager
-            and employee.manager.user == user
-        )
+        is_manager = user.role == User.Role.MANAGER and employee.manager and employee.manager == user
 
         if not (is_admin or is_manager):
             messages.error(request, "Permission denied")
@@ -1642,9 +1563,9 @@ def employee_detail(request, pk):
         end_date = timezone.datetime(year, month, num_days).date()
 
         # Fetch Attendance for the period
-        attendance_qs = Attendance.objects.filter(
-            employee=employee, date__range=[start_date, end_date]
-        ).order_by("-date")
+        attendance_qs = Attendance.objects.filter(employee=employee, date__range=[start_date, end_date]).order_by(
+            "-date"
+        )
 
         # Calculate Stats
         total_days = attendance_qs.count()
@@ -1659,9 +1580,7 @@ def employee_detail(request, pk):
         map_attendance = attendance_qs.filter(date=today).first()
 
         # If no attendance today, grab the last one with location data
-        if not map_attendance or (
-            not map_attendance.location_in and not map_attendance.location_out
-        ):
+        if not map_attendance or (not map_attendance.location_in and not map_attendance.location_out):
             # Find last record with location
             last_loc_att = attendance_qs.exclude(location_in__isnull=True).first()
             if last_loc_att:
@@ -1687,16 +1606,12 @@ def employee_detail(request, pk):
             # Query LocationLog for this employee on this date
             # Assuming LocationLog has a timestamp field
             if map_attendance.clock_in:
-                day_start = timezone.make_aware(
-                    timezone.datetime.combine(map_date, timezone.datetime.min.time())
-                )
-                day_end = timezone.make_aware(
-                    timezone.datetime.combine(map_date, timezone.datetime.max.time())
-                )
+                day_start = timezone.make_aware(timezone.datetime.combine(map_date, timezone.datetime.min.time()))
+                day_end = timezone.make_aware(timezone.datetime.combine(map_date, timezone.datetime.max.time()))
 
-                logs = LocationLog.objects.filter(
-                    employee=employee, timestamp__range=[day_start, day_end]
-                ).order_by("timestamp")
+                logs = LocationLog.objects.filter(employee=employee, timestamp__range=[day_start, day_end]).order_by(
+                    "timestamp"
+                )
 
                 for log in logs:
                     map_data.append(
@@ -1744,7 +1659,6 @@ def employee_detail(request, pk):
 
 
 from django.views.decorators.http import require_http_methods
-from django.contrib import messages
 
 
 @csrf_exempt
@@ -1756,8 +1670,9 @@ def employee_exit_action(request, pk):
     - Absconding/Termination: Calculates last working day, disables login immediately
     Only accessible by Company Admin or Super Admin
     """
-    from .models import ExitInitiative
     from datetime import timedelta
+
+    from .models import ExitInitiative
 
     # Permission check
     if request.user.role not in [User.Role.COMPANY_ADMIN, User.Role.SUPERADMIN]:
@@ -1809,13 +1724,9 @@ def employee_exit_action(request, pk):
 
         # Parse and validate date
         try:
-            submission_date = timezone.datetime.strptime(
-                submission_date_str, "%Y-%m-%d"
-            ).date()
+            submission_date = timezone.datetime.strptime(submission_date_str, "%Y-%m-%d").date()
         except ValueError:
-            return JsonResponse(
-                {"status": "error", "message": "Invalid date format."}, status=400
-            )
+            return JsonResponse({"status": "error", "message": "Invalid date format."}, status=400)
 
         # Handle different exit types
         if exit_type == "RESIGNATION":
@@ -1839,19 +1750,20 @@ def employee_exit_action(request, pk):
             # --- Email Notification ---
             try:
                 from django.core.mail import send_mail
+
                 from companies.models import Announcement
 
                 # 1. Recipients
                 recipients = []
 
                 # Reporting Manager
-                if employee.manager and employee.manager.user.email:
-                    recipients.append(employee.manager.user.email)
+                if employee.manager and employee.manager.email:
+                    recipients.append(employee.manager.email)
 
                 # HR/Admins
-                company_admins = User.objects.filter(
-                    company=employee.company, role="COMPANY_ADMIN"
-                ).values_list("email", flat=True)
+                company_admins = User.objects.filter(company=employee.company, role="COMPANY_ADMIN").values_list(
+                    "email", flat=True
+                )
                 recipients.extend(list(company_admins))
 
                 # Company HR Email
@@ -1865,16 +1777,16 @@ def employee_exit_action(request, pk):
                     subject = f"Resignation Submitted: {employee.user.get_full_name()} ({employee.designation})"
                     message = f"""
                     Dear Team,
-                    
+
                     This is to inform you that {employee.user.get_full_name()} ({employee.designation}) has submitted their resignation on {submission_date.strftime("%d %b %Y")}.
-                    
+
                     Reason:
                     {exit_note}
-                    
+
                     Current Status: Pending Approval
-                    
+
                     Please login to the HRMS portal to review and take necessary action.
-                    
+
                     Regards,
                     HRMS System
                     """
@@ -1898,10 +1810,10 @@ def employee_exit_action(request, pk):
                         location=employee.location,  # Target to same location at least
                     )
                 except Exception as e:
-                    print(f"Error creating announcement: {e}")
+                    logger.error(f"Error creating announcement: {e}")
 
             except Exception as e:
-                print(f"Error in resignation notification: {e}")
+                logger.error(f"Error in resignation notification: {e}")
 
             messages.success(
                 request,
@@ -1915,7 +1827,6 @@ def employee_exit_action(request, pk):
                     "redirect_url": reverse("employee_list"),
                 }
             )
-
 
         elif exit_type in ["ABSCONDED", "TERMINATED"]:
             # Validate notice period
@@ -1970,13 +1881,13 @@ def employee_exit_action(request, pk):
                 recipients = []
 
                 # Reporting Manager
-                if employee.manager and employee.manager.user.email:
-                    recipients.append(employee.manager.user.email)
+                if employee.manager and employee.manager.email:
+                    recipients.append(employee.manager.email)
 
                 # HR/Admins
-                company_admins = User.objects.filter(
-                    company=employee.company, role="COMPANY_ADMIN"
-                ).values_list("email", flat=True)
+                company_admins = User.objects.filter(company=employee.company, role="COMPANY_ADMIN").values_list(
+                    "email", flat=True
+                )
                 recipients.extend(list(company_admins))
 
                 # Company HR Email
@@ -2015,7 +1926,7 @@ HRMS System
                     )
 
             except Exception as e:
-                print(f"Error in {exit_type.lower()} notification: {e}")
+                logger.error(f"Error in {exit_type.lower()} notification: {e}")
 
             messages.success(
                 request,
@@ -2030,18 +1941,13 @@ HRMS System
                 }
             )
 
-
     except Employee.DoesNotExist:
-        return JsonResponse(
-            {"status": "error", "message": "Employee not found."}, status=404
-        )
+        return JsonResponse({"status": "error", "message": "Employee not found."}, status=404)
     except Exception as e:
         import traceback
 
         traceback.print_exc()
-        return JsonResponse(
-            {"status": "error", "message": f"An error occurred: {str(e)}"}, status=500
-        )
+        return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
 
 
 @login_required
@@ -2050,9 +1956,11 @@ def approve_exit_initiative(request, pk):
     Approve an exit initiative (resignation, termination, or absconding)
     Accessible by Admin and Manager
     """
-    from .models import ExitInitiative
-    from datetime import timedelta, datetime
+    from datetime import datetime, timedelta
+
     from dateutil.relativedelta import relativedelta
+
+    from .models import ExitInitiative
 
     try:
         exit_initiative = ExitInitiative.objects.get(pk=pk)
@@ -2061,11 +1969,7 @@ def approve_exit_initiative(request, pk):
         # Permission check: Admin or Manager
         user = request.user
         is_admin = user.role in [User.Role.COMPANY_ADMIN, User.Role.SUPERADMIN]
-        is_manager = (
-            user.role == User.Role.MANAGER
-            and employee.manager
-            and employee.manager.user == user
-        )
+        is_manager = user.role == User.Role.MANAGER and employee.manager and employee.manager == user
 
         if not (is_admin or is_manager):
             messages.error(request, "Permission denied. Only Admin or Manager can approve exit initiatives.")
@@ -2082,13 +1986,13 @@ def approve_exit_initiative(request, pk):
             if not last_working_day_str:
                 messages.error(request, "Last working day is required.")
                 return redirect("exit_initiatives_list")
-            
+
             try:
                 last_working_day = datetime.strptime(last_working_day_str, "%Y-%m-%d").date()
             except ValueError:
                 messages.error(request, "Invalid date format for last working day.")
                 return redirect("exit_initiatives_list")
-            
+
             # Validate that last working day is not before submission date
             if last_working_day < exit_initiative.submission_date:
                 messages.error(request, "Last working day cannot be before submission date.")
@@ -2161,8 +2065,8 @@ Dear {employee.user.get_full_name()},
 
 Your {exit_initiative.get_exit_type_display().lower()} request has been approved.
 
-Submission Date: {exit_initiative.submission_date.strftime('%d %b %Y')}
-Last Working Day: {last_working_day.strftime('%d %b %Y')}
+Submission Date: {exit_initiative.submission_date.strftime("%d %b %Y")}
+Last Working Day: {last_working_day.strftime("%d %b %Y")}
 Approved By: {user.get_full_name()}
 
 Reason:
@@ -2184,7 +2088,7 @@ Regards,
                 fail_silently=True,
             )
         except Exception as e:
-            print(f"Error sending approval email: {e}")
+            logger.error(f"Error sending approval email: {e}")
 
         messages.success(request, status_msg)
         return redirect("exit_initiatives_list")
@@ -2194,6 +2098,7 @@ Regards,
         return redirect("exit_initiatives_list")
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         messages.error(request, f"An error occurred: {str(e)}")
         return redirect("exit_initiatives_list")
@@ -2218,11 +2123,7 @@ def reject_exit_initiative(request, pk):
         # Permission check: Admin or Manager
         user = request.user
         is_admin = user.role in [User.Role.COMPANY_ADMIN, User.Role.SUPERADMIN]
-        is_manager = (
-            user.role == User.Role.MANAGER
-            and employee.manager
-            and employee.manager.user == user
-        )
+        is_manager = user.role == User.Role.MANAGER and employee.manager and employee.manager == user
 
         if not (is_admin or is_manager):
             messages.error(request, "Permission denied. Only Admin or Manager can reject exit initiatives.")
@@ -2268,7 +2169,7 @@ Dear {employee.user.get_full_name()},
 
 Your {exit_initiative.get_exit_type_display().lower()} request has been rejected.
 
-Submission Date: {exit_initiative.submission_date.strftime('%d %b %Y')}
+Submission Date: {exit_initiative.submission_date.strftime("%d %b %Y")}
 Rejected By: {user.get_full_name()}
 
 Reason for Rejection:
@@ -2288,7 +2189,7 @@ Regards,
                 fail_silently=True,
             )
         except Exception as e:
-            print(f"Error sending rejection email: {e}")
+            logger.error(f"Error sending rejection email: {e}")
 
         messages.success(request, f"Exit initiative rejected. {employee.user.get_full_name()} has been notified.")
         return redirect("exit_initiatives_list")
@@ -2298,6 +2199,7 @@ Regards,
         return redirect("exit_initiatives_list")
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         messages.error(request, f"An error occurred: {str(e)}")
         return redirect("exit_initiatives_list")
@@ -2317,16 +2219,20 @@ def exit_initiatives_list(request):
     # Get exit initiatives based on role
     if is_admin:
         # Admin can see all exit initiatives in their company
-        exit_initiatives = ExitInitiative.objects.filter(
-            employee__company=user.company
-        ).select_related('employee', 'employee__user', 'approved_by').order_by('-created_at')
+        exit_initiatives = (
+            ExitInitiative.objects.filter(employee__company=user.company)
+            .select_related("employee", "employee__user", "approved_by")
+            .order_by("-created_at")
+        )
     elif user.role == User.Role.MANAGER:
         # Managers can only see their team members' exit initiatives
         try:
             manager_employee = user.employee_profile
-            exit_initiatives = ExitInitiative.objects.filter(
-                employee__manager=manager_employee
-            ).select_related('employee', 'employee__user', 'approved_by').order_by('-created_at')
+            exit_initiatives = (
+                ExitInitiative.objects.filter(employee__manager=user)
+                .select_related("employee", "employee__user", "approved_by")
+                .order_by("-created_at")
+            )
         except:
             exit_initiatives = ExitInitiative.objects.none()
     else:
@@ -2335,26 +2241,26 @@ def exit_initiatives_list(request):
         return redirect("dashboard")
 
     # Filter by status
-    status_filter = request.GET.get('status', 'pending')
-    if status_filter == 'pending':
-        exit_initiatives = exit_initiatives.filter(status='PENDING')
-    elif status_filter == 'approved':
-        exit_initiatives = exit_initiatives.filter(status='APPROVED')
-    elif status_filter == 'rejected':
-        exit_initiatives = exit_initiatives.filter(status='REJECTED')
+    status_filter = request.GET.get("status", "pending")
+    if status_filter == "pending":
+        exit_initiatives = exit_initiatives.filter(status="PENDING")
+    elif status_filter == "approved":
+        exit_initiatives = exit_initiatives.filter(status="APPROVED")
+    elif status_filter == "rejected":
+        exit_initiatives = exit_initiatives.filter(status="REJECTED")
     # 'all' shows everything
 
     context = {
-        'exit_initiatives': exit_initiatives,
-        'status_filter': status_filter,
-        'pending_count': ExitInitiative.objects.filter(
-            employee__company=user.company, status='PENDING'
-        ).count() if is_admin else ExitInitiative.objects.filter(
-            employee__manager=user.employee_profile, status='PENDING'
-        ).count() if user.role == User.Role.MANAGER else 0,
+        "exit_initiatives": exit_initiatives,
+        "status_filter": status_filter,
+        "pending_count": ExitInitiative.objects.filter(employee__company=user.company, status="PENDING").count()
+        if is_admin
+        else ExitInitiative.objects.filter(employee__manager=user, status="PENDING").count()
+        if user.role == User.Role.MANAGER
+        else 0,
     }
 
-    return render(request, 'employees/exit_initiatives_list.html', context)
+    return render(request, "employees/exit_initiatives_list.html", context)
 
 
 @csrf_exempt
@@ -2364,25 +2270,19 @@ def get_attendance_map_data(request, pk):
         attendance = Attendance.objects.get(pk=pk)
 
         # Permission check
-        is_admin = (
-            request.user.role == User.Role.COMPANY_ADMIN or request.user.is_superuser
-        )
+        is_admin = request.user.role == User.Role.COMPANY_ADMIN or request.user.is_superuser
 
         # Safe manager check
         is_manager = False
-        if request.user.role == User.Role.MANAGER and hasattr(
-            request.user, "employee_profile"
-        ):
+        if request.user.role == User.Role.MANAGER and hasattr(request.user, "employee_profile"):
             # Compare manager's user object with request user
             if attendance.employee.manager:
-                is_manager = attendance.employee.manager.user == request.user
+                is_manager = attendance.employee.manager == request.user
 
         is_self = attendance.employee.user == request.user
 
         if not (is_admin or is_manager or is_self):
-            return JsonResponse(
-                {"status": "error", "message": "Permission denied"}, status=403
-            )
+            return JsonResponse({"status": "error", "message": "Permission denied"}, status=403)
 
         map_locations = []
 
@@ -2448,9 +2348,7 @@ def get_attendance_map_data(request, pk):
         return JsonResponse({"status": "success", "data": map_locations})
 
     except Attendance.DoesNotExist:
-        return JsonResponse(
-            {"status": "error", "message": "Attendance not found"}, status=404
-        )
+        return JsonResponse({"status": "error", "message": "Attendance not found"}, status=404)
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
@@ -2463,6 +2361,7 @@ class BulkEmployeeImportView(LoginRequiredMixin, CompanyAdminRequiredMixin, Form
     def form_valid(self, form):
         import pandas as pd
         from django.contrib import messages
+
         from .utils import send_activation_email
 
         file = form.cleaned_data["import_file"]
@@ -2511,7 +2410,7 @@ class BulkEmployeeImportView(LoginRequiredMixin, CompanyAdminRequiredMixin, Form
                         user = User.objects.filter(email=email).first()
                         if user:
                             # Check if the user already has an employee profile (is a real employee)
-                            if hasattr(user, 'employee_profile'):
+                            if hasattr(user, "employee_profile"):
                                 raise ValueError(f"User with email {email} already exists")
                             else:
                                 # User exists but no employee profile (Zombie record) -> Reuse it
@@ -2566,9 +2465,7 @@ class BulkEmployeeImportView(LoginRequiredMixin, CompanyAdminRequiredMixin, Form
 
                         # Fallback location
                         if not location:
-                            location = Location.objects.filter(
-                                company=self.request.user.company
-                            ).first()
+                            location = Location.objects.filter(company=self.request.user.company).first()
 
                         # 5. Create Employee
                         badge_id = str(row.get("badge_id", ""))
@@ -2580,20 +2477,12 @@ class BulkEmployeeImportView(LoginRequiredMixin, CompanyAdminRequiredMixin, Form
                         # Sync Department & Designation with Role Configuration
                         from companies.models import Department, Designation
 
-                        dept_name = (
-                            str(row.get("department", "General")).strip().title()
-                        )
-                        desig_name = (
-                            str(row.get("designation", "Employee")).strip().title()
-                        )
+                        dept_name = str(row.get("department", "General")).strip().title()
+                        desig_name = str(row.get("designation", "Employee")).strip().title()
 
                         # Ensure they exist in Role Config (prevents duplicates)
-                        Department.objects.get_or_create(
-                            company=self.request.user.company, name=dept_name
-                        )
-                        Designation.objects.get_or_create(
-                            company=self.request.user.company, name=desig_name
-                        )
+                        Department.objects.get_or_create(company=self.request.user.company, name=dept_name)
+                        Designation.objects.get_or_create(company=self.request.user.company, name=desig_name)
 
                         employee = Employee.objects.create(
                             user=user,
@@ -2602,18 +2491,12 @@ class BulkEmployeeImportView(LoginRequiredMixin, CompanyAdminRequiredMixin, Form
                             department=dept_name,
                             location=location,
                             badge_id=badge_id,
-                            mobile_number=str(row.get("mobile", ""))
-                            if not pd.isna(row.get("mobile"))
-                            else None,
+                            mobile_number=str(row.get("mobile", "")) if not pd.isna(row.get("mobile")) else None,
                             gender=str(row.get("gender", "M"))[0].upper(),
-                            marital_status=str(row.get("marital_status", "S"))[
-                                0
-                            ].upper(),
+                            marital_status=str(row.get("marital_status", "S"))[0].upper(),
                             date_of_joining=doj,
                             dob=dob,
-                            annual_ctc=row.get("annual_ctc")
-                            if not pd.isna(row.get("annual_ctc"))
-                            else 0,
+                            annual_ctc=row.get("annual_ctc") if not pd.isna(row.get("annual_ctc")) else 0,
                         )
 
                         # 6. Create Leave Balance (handled by signal)
@@ -2625,9 +2508,7 @@ class BulkEmployeeImportView(LoginRequiredMixin, CompanyAdminRequiredMixin, Form
                         success_count += 1
 
                 except Exception as e:
-                    errors.append(
-                        f"Row {index + 2} ({row.get('email', 'Unknown')}): {str(e)}"
-                    )
+                    errors.append(f"Row {index + 2} ({row.get('email', 'Unknown')}): {str(e)}")
 
             if success_count > 0:
                 messages.success(
@@ -2696,12 +2577,8 @@ def download_sample_import_file(request):
     df = pd.concat([df, pd.DataFrame([dummy_data])], ignore_index=True)
 
     # Create response
-    response = HttpResponse(
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-    response["Content-Disposition"] = (
-        "attachment; filename=employee_bulk_import_sample.xlsx"
-    )
+    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = "attachment; filename=employee_bulk_import_sample.xlsx"
 
     try:
         # Use openpyxl engine
@@ -2731,9 +2608,7 @@ class RegularizationCreateView(LoginRequiredMixin, CreateView):
         context = super().get_context_data(**kwargs)
         # Pass user's regularizations to show history on same page if needed
         if hasattr(self.request.user, "employee_profile"):
-            context["history"] = RegularizationRequest.objects.filter(
-                employee=self.request.user.employee_profile
-            )
+            context["history"] = RegularizationRequest.objects.filter(employee=self.request.user.employee_profile)
         return context
 
     def form_valid(self, form):
@@ -2744,8 +2619,9 @@ class RegularizationCreateView(LoginRequiredMixin, CreateView):
         employee = self.request.user.employee_profile
 
         # Server-side duplicate prevention: Check for recent duplicate submissions
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
 
         recent_duplicate = RegularizationRequest.objects.filter(
             employee=employee,
@@ -2770,15 +2646,14 @@ class RegularizationCreateView(LoginRequiredMixin, CreateView):
 
         def send_email_async():
             try:
-                from core.email_utils import send_regularization_request_notification
                 import logging
+
+                from core.email_utils import send_regularization_request_notification
 
                 logger = logging.getLogger(__name__)
                 result = send_regularization_request_notification(self.object)
                 if not result.get("hr", False):
-                    logger.error(
-                        f"Failed to send regularization request email to HR for {self.object.id}"
-                    )
+                    logger.error(f"Failed to send regularization request email to HR for {self.object.id}")
             except Exception as e:
                 import logging
 
@@ -2794,9 +2669,7 @@ class RegularizationCreateView(LoginRequiredMixin, CreateView):
 
     def get_success_url(self):
         # If admin/manager, maybe go to list, if employee go to profile/home
-        return reverse_lazy(
-            "personal_home"
-        )  # Or wherever "My Regularizations" are shown
+        return reverse_lazy("personal_home")  # Or wherever "My Regularizations" are shown
 
 
 class RegularizationListView(LoginRequiredMixin, ListView):
@@ -2830,15 +2703,11 @@ def approve_regularization(request, pk):
         user = request.user
         is_admin = user.role == User.Role.COMPANY_ADMIN or user.is_superuser
         is_manager = (
-            user.role == User.Role.MANAGER
-            and reg_request.employee.manager
-            and reg_request.employee.manager.user == user
+            user.role == User.Role.MANAGER and reg_request.employee.manager and reg_request.employee.manager == user
         )
 
         if not (is_admin or is_manager):
-            return JsonResponse(
-                {"status": "error", "message": "Permission denied"}, status=403
-            )
+            return JsonResponse({"status": "error", "message": "Permission denied"}, status=403)
 
         # Approve
         reg_request.status = "APPROVED"
@@ -2849,15 +2718,11 @@ def approve_regularization(request, pk):
 
         # Update Attendance
         # We need to find or create the attendance record for that date
-        attendance, created = Attendance.objects.get_or_create(
-            employee=reg_request.employee, date=reg_request.date
-        )
+        attendance, created = Attendance.objects.get_or_create(employee=reg_request.employee, date=reg_request.date)
 
         if reg_request.check_in:
             # We need to combine date with time
-            attendance.clock_in = timezone.make_aware(
-                timezone.datetime.combine(reg_request.date, reg_request.check_in)
-            )
+            attendance.clock_in = timezone.make_aware(timezone.datetime.combine(reg_request.date, reg_request.check_in))
 
         if reg_request.check_out:
             attendance.clock_out = timezone.make_aware(
@@ -2881,8 +2746,9 @@ def approve_regularization(request, pk):
 
         def send_email_async():
             try:
-                from core.email_utils import send_regularization_approval_notification
                 import logging
+
+                from core.email_utils import send_regularization_approval_notification
 
                 logger = logging.getLogger(__name__)
                 if not send_regularization_approval_notification(reg_request):
@@ -2913,15 +2779,11 @@ def reject_regularization(request, pk):
         user = request.user
         is_admin = user.role == User.Role.COMPANY_ADMIN or user.is_superuser
         is_manager = (
-            user.role == User.Role.MANAGER
-            and reg_request.employee.manager
-            and reg_request.employee.manager.user == user
+            user.role == User.Role.MANAGER and reg_request.employee.manager and reg_request.employee.manager == user
         )
 
         if not (is_admin or is_manager):
-            return JsonResponse(
-                {"status": "error", "message": "Permission denied"}, status=403
-            )
+            return JsonResponse({"status": "error", "message": "Permission denied"}, status=403)
 
         reg_request.status = "REJECTED"
         reg_request.manager_comment = request.POST.get(
@@ -2934,8 +2796,9 @@ def reject_regularization(request, pk):
 
         def send_email_async():
             try:
-                from core.email_utils import send_regularization_rejection_notification
                 import logging
+
+                from core.email_utils import send_regularization_rejection_notification
 
                 logger = logging.getLogger(__name__)
                 if not send_regularization_rejection_notification(reg_request):
@@ -2989,14 +2852,11 @@ def leave_configuration(request):
             _ = employee.leave_balance
         except ObjectDoesNotExist:
             # Create with 0 leaves for new employees (probation period)
-            LeaveBalance.objects.create(
-                employee=employee,
-                casual_leave_allocated=0.0,
-                sick_leave_allocated=0.0
-            )
+            LeaveBalance.objects.create(employee=employee, casual_leave_allocated=0.0, sick_leave_allocated=0.0)
 
     # Context for Accrual Modal (Safe from template syntax errors)
     import calendar
+
     from django.utils import timezone
 
     now = timezone.now()
@@ -3016,9 +2876,7 @@ def leave_configuration(request):
     years_ctx = []
     # Show current year and next 2 years, or surrounding
     for y in [2024, 2025, 2026]:
-        years_ctx.append(
-            {"value": y, "selected": "selected" if y == current_year else ""}
-        )
+        years_ctx.append({"value": y, "selected": "selected" if y == current_year else ""})
 
     return render(
         request,
@@ -3031,28 +2889,20 @@ def leave_configuration(request):
 @login_required
 def update_leave_balance(request, pk):
     if request.method != "POST":
-        return JsonResponse(
-            {"status": "error", "message": "Invalid method"}, status=405
-        )
+        return JsonResponse({"status": "error", "message": "Invalid method"}, status=405)
 
     user = request.user
     if user.role not in [User.Role.COMPANY_ADMIN, User.Role.MANAGER]:
-        return JsonResponse(
-            {"status": "error", "message": "Permission Denied"}, status=403
-        )
+        return JsonResponse({"status": "error", "message": "Permission Denied"}, status=403)
 
     try:
         employee = Employee.objects.get(pk=pk)
         # Verify access rights
         if user.role == User.Role.MANAGER and employee.manager != user:
-            return JsonResponse(
-                {"status": "error", "message": "Permission Denied"}, status=403
-            )
+            return JsonResponse({"status": "error", "message": "Permission Denied"}, status=403)
 
         if user.role == User.Role.COMPANY_ADMIN and employee.company != user.company:
-            return JsonResponse(
-                {"status": "error", "message": "Permission Denied"}, status=403
-            )
+            return JsonResponse({"status": "error", "message": "Permission Denied"}, status=403)
 
         balance = employee.leave_balance
 
@@ -3082,22 +2932,19 @@ def update_leave_balance(request, pk):
 
         balance.save()
 
-        return JsonResponse(
-            {"status": "success", "message": "Balance updated successfully"}
-        )
+        return JsonResponse({"status": "success", "message": "Balance updated successfully"})
 
     except Employee.DoesNotExist:
-        return JsonResponse(
-            {"status": "error", "message": "Employee not found"}, status=404
-        )
+        return JsonResponse({"status": "error", "message": "Employee not found"}, status=404)
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
 @login_required
 def run_monthly_accrual(request):
-    from django.contrib import messages
     import calendar
+
+    from django.contrib import messages
 
     user = request.user
     if user.role not in [User.Role.COMPANY_ADMIN, User.Role.MANAGER]:
@@ -3158,9 +3005,7 @@ def employee_id_proofs(request, pk):
         # Permission Check
         user = request.user
         is_admin = user.role == User.Role.COMPANY_ADMIN
-        is_self = (
-            hasattr(user, "employee_profile") and user.employee_profile == employee
-        )
+        is_self = hasattr(user, "employee_profile") and user.employee_profile == employee
 
         if not (is_admin or is_self):
             messages.error(request, "Permission denied")
@@ -3306,13 +3151,9 @@ def delete_emergency_contact(request, contact_id):
         contact = EmergencyContact.objects.get(id=contact_id, employee=employee)
         contact.delete()
 
-        return JsonResponse(
-            {"status": "success", "message": "Emergency contact deleted successfully"}
-        )
+        return JsonResponse({"status": "success", "message": "Emergency contact deleted successfully"})
     except EmergencyContact.DoesNotExist:
-        return JsonResponse(
-            {"status": "error", "message": "Contact not found"}, status=404
-        )
+        return JsonResponse({"status": "error", "message": "Contact not found"}, status=404)
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
@@ -3325,8 +3166,8 @@ def update_emergency_contact(request, contact_id):
     """
     try:
         employee = request.user.employee_profile
-        from .models import EmergencyContact
         from .forms import EmergencyContactForm
+        from .models import EmergencyContact
 
         contact = EmergencyContact.objects.get(id=contact_id, employee=employee)
 
@@ -3353,9 +3194,7 @@ def update_emergency_contact(request, contact_id):
                 status=400,
             )
     except EmergencyContact.DoesNotExist:
-        return JsonResponse(
-            {"status": "error", "message": "Contact not found"}, status=404
-        )
+        return JsonResponse({"status": "error", "message": "Contact not found"}, status=404)
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
@@ -3370,9 +3209,7 @@ def submit_hourly_location(request):
     API endpoint for employees to submit their hourly location updates
     """
     if request.method != "POST":
-        return JsonResponse(
-            {"status": "error", "message": "Invalid method"}, status=405
-        )
+        return JsonResponse({"status": "error", "message": "Invalid method"}, status=405)
 
     try:
         data = json.loads(request.body)
@@ -3387,9 +3224,7 @@ def submit_hourly_location(request):
             )
 
         if not hasattr(request.user, "employee_profile"):
-            return JsonResponse(
-                {"status": "error", "message": "No employee profile found"}, status=400
-            )
+            return JsonResponse({"status": "error", "message": "No employee profile found"}, status=400)
 
         employee = request.user.employee_profile
         today = timezone.localdate()
@@ -3400,9 +3235,7 @@ def submit_hourly_location(request):
         ).first()
 
         if not active_session:
-            return JsonResponse(
-                {"status": "error", "message": "No active session found"}, status=400
-            )
+            return JsonResponse({"status": "error", "message": "No active session found"}, status=400)
 
         # Check for 9-hour limit
         time_since_clockin = timezone.now() - active_session.clock_in
@@ -3449,15 +3282,11 @@ def get_location_tracking_status(request):
     API endpoint to check if employee needs to provide location update
     """
     if request.method != "GET":
-        return JsonResponse(
-            {"status": "error", "message": "Invalid method"}, status=405
-        )
+        return JsonResponse({"status": "error", "message": "Invalid method"}, status=405)
 
     try:
         if not hasattr(request.user, "employee_profile"):
-            return JsonResponse(
-                {"status": "error", "message": "No employee profile found"}, status=400
-            )
+            return JsonResponse({"status": "error", "message": "No employee profile found"}, status=400)
 
         employee = request.user.employee_profile
         today = timezone.localdate()
@@ -3479,9 +3308,7 @@ def get_location_tracking_status(request):
 
         # Check if location update is needed
         last_log = (
-            LocationLog.objects.filter(
-                attendance_session=active_session, log_type__in=["CLOCK_IN", "HOURLY"]
-            )
+            LocationLog.objects.filter(attendance_session=active_session, log_type__in=["CLOCK_IN", "HOURLY"])
             .order_by("-timestamp")
             .first()
         )
@@ -3540,18 +3367,14 @@ def get_employee_location_history(request, employee_id):
     try:
         # Check permissions
         if request.user.role not in [User.Role.COMPANY_ADMIN, User.Role.MANAGER]:
-            return JsonResponse(
-                {"status": "error", "message": "Permission denied"}, status=403
-            )
+            return JsonResponse({"status": "error", "message": "Permission denied"}, status=403)
 
         employee = Employee.objects.get(id=employee_id)
 
         # If manager, ensure they can only see their subordinates
         if request.user.role == User.Role.MANAGER:
             if employee.manager != request.user:
-                return JsonResponse(
-                    {"status": "error", "message": "Permission denied"}, status=403
-                )
+                return JsonResponse({"status": "error", "message": "Permission denied"}, status=403)
 
         # Get date range from query params
         from datetime import datetime
@@ -3562,9 +3385,7 @@ def get_employee_location_history(request, employee_id):
         if start_date:
             start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
         else:
-            start_date = timezone.localdate() - timedelta(
-                days=7
-            )  # Default to last 7 days
+            start_date = timezone.localdate() - timedelta(days=7)  # Default to last 7 days
 
         if end_date:
             end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
@@ -3594,12 +3415,8 @@ def get_employee_location_history(request, employee_id):
                     "longitude": float(log.longitude),
                     "log_type": log.log_type,
                     "accuracy": log.accuracy,
-                    "session_number": log.attendance_session.session_number
-                    if log.attendance_session
-                    else None,
-                    "session_type": log.attendance_session.session_type
-                    if log.attendance_session
-                    else None,
+                    "session_number": log.attendance_session.session_number if log.attendance_session else None,
+                    "session_type": log.attendance_session.session_type if log.attendance_session else None,
                 }
             )
 
@@ -3621,9 +3438,7 @@ def get_employee_location_history(request, employee_id):
         )
 
     except Employee.DoesNotExist:
-        return JsonResponse(
-            {"status": "error", "message": "Employee not found"}, status=404
-        )
+        return JsonResponse({"status": "error", "message": "Employee not found"}, status=404)
     except Exception as e:
         import logging
 

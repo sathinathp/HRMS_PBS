@@ -1,8 +1,10 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from .models import Employee, LeaveRequest, RegularizationRequest, EmergencyContact
+
 from companies.models import Company, ShiftSchedule
+
+from .models import EmergencyContact, Employee, LeaveRequest, RegularizationRequest
 
 User = get_user_model()
 
@@ -20,9 +22,7 @@ class EmployeeCreationForm(forms.ModelForm):
         # Admin role is usually assigned not chosen here, but implementing as requested
         ("COMPANY_ADMIN", "Admin"),
     ]
-    role = forms.ChoiceField(
-        choices=ROLE_CHOICES, widget=forms.RadioSelect, initial="EMPLOYEE", label="Role"
-    )
+    role = forms.ChoiceField(choices=ROLE_CHOICES, widget=forms.RadioSelect, initial="EMPLOYEE", label="Role")
 
     # Company selection (Only for superuser or specific use cases)
     # We will handle the "limit to own company" in View/Form init
@@ -45,6 +45,7 @@ class EmployeeCreationForm(forms.ModelForm):
             "marital_status",
             "dob",
             "permanent_address",
+            "current_address",
             "emergency_contact",
             "badge_id",
             # Job
@@ -66,6 +67,7 @@ class EmployeeCreationForm(forms.ModelForm):
             "dob": forms.DateInput(attrs={"type": "date"}),
             "date_of_joining": forms.DateInput(attrs={"type": "date"}),
             "permanent_address": forms.Textarea(attrs={"rows": 3}),
+            "current_address": forms.Textarea(attrs={"rows": 3}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -75,9 +77,7 @@ class EmployeeCreationForm(forms.ModelForm):
         # Company Isolation Logic
         if self.user and self.user.role == User.Role.COMPANY_ADMIN:
             # Lock company to admin's company
-            self.fields["company_selection"].queryset = Company.objects.filter(
-                pk=self.user.company.id
-            )
+            self.fields["company_selection"].queryset = Company.objects.filter(pk=self.user.company.id)
             self.fields["company_selection"].initial = self.user.company
             self.fields["company_selection"].widget.attrs["disabled"] = "disabled"
             self.fields["company_selection"].required = False
@@ -95,16 +95,12 @@ class EmployeeCreationForm(forms.ModelForm):
             self.fields["manager"].queryset = company_managers | super_admins
 
             # Customize label to show name and role
-            self.fields["manager"].label_from_instance = (
-                lambda obj: f"{obj.get_full_name()} ({obj.get_role_display()})"
-            )
+            self.fields["manager"].label_from_instance = lambda obj: f"{obj.get_full_name()} ({obj.get_role_display()})"
 
             # Filtering Locations: Only show locations from the same company
             from companies.models import Location
 
-            self.fields["location"].queryset = Location.objects.filter(
-                company=self.user.company, is_active=True
-            )
+            self.fields["location"].queryset = Location.objects.filter(company=self.user.company, is_active=True)
 
             # Filtering Shifts
             self.fields["assigned_shift"].queryset = ShiftSchedule.objects.filter(
@@ -116,18 +112,10 @@ class EmployeeCreationForm(forms.ModelForm):
             from companies.models import Department, Designation
 
             # Departments
-            depts = list(
-                Department.objects.filter(company=self.user.company).values_list(
-                    "name", flat=True
-                )
-            )
+            depts = list(Department.objects.filter(company=self.user.company).values_list("name", flat=True))
             if depts:
                 # Preserve existing value if not in list
-                current_dept = (
-                    self.instance.department
-                    if self.instance and self.instance.pk
-                    else None
-                )
+                current_dept = self.instance.department if self.instance and self.instance.pk else None
                 if current_dept and current_dept not in depts:
                     depts.append(current_dept)
 
@@ -139,17 +127,9 @@ class EmployeeCreationForm(forms.ModelForm):
                 )
 
             # Designations
-            desigs = list(
-                Designation.objects.filter(company=self.user.company).values_list(
-                    "name", flat=True
-                )
-            )
+            desigs = list(Designation.objects.filter(company=self.user.company).values_list("name", flat=True))
             if desigs:
-                current_desig = (
-                    self.instance.designation
-                    if self.instance and self.instance.pk
-                    else None
-                )
+                current_desig = self.instance.designation if self.instance and self.instance.pk else None
                 if current_desig and current_desig not in desigs:
                     desigs.append(current_desig)
 
@@ -163,9 +143,7 @@ class EmployeeCreationForm(forms.ModelForm):
     def clean_email(self):
         email = self.cleaned_data.get("email")
         if User.objects.filter(email=email).exists():
-            raise ValidationError(
-                "A user with this email address already exists. Please use a different email."
-            )
+            raise ValidationError("A user with this email address already exists. Please use a different email.")
 
         # Domain Validation
         company = self.cleaned_data.get("company_selection")
@@ -243,12 +221,8 @@ class LeaveApplicationForm(forms.ModelForm):
             "supporting_document",
         ]
         widgets = {
-            "start_date": forms.DateInput(
-                attrs={"type": "date", "class": "form-control"}
-            ),
-            "end_date": forms.DateInput(
-                attrs={"type": "date", "class": "form-control"}
-            ),
+            "start_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+            "end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "leave_type": forms.Select(attrs={"class": "form-select"}),
             "duration": forms.RadioSelect(attrs={"class": "form-check-input"}),
             "reason": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
@@ -269,9 +243,7 @@ class LeaveApplicationForm(forms.ModelForm):
             company_name = self.user.company.name.lower()
             if "bluebix" in company_name or "softstand" in company_name:
                 if leave_type == "SL" and duration != "HALF":
-                    raise ValidationError(
-                        "Company Policy: Sick Leave (SL) can only be taken as Half Day (0.5 days)."
-                    )
+                    raise ValidationError("Company Policy: Sick Leave (SL) can only be taken as Half Day (0.5 days).")
 
         return cleaned_data
 
@@ -293,15 +265,8 @@ class EmployeeUpdateForm(EmployeeCreationForm):
     def clean_email(self):
         email = self.cleaned_data.get("email")
         # Check uniqueness excluding current user
-        if (
-            self.instance.user
-            and User.objects.filter(email=email)
-            .exclude(pk=self.instance.user.pk)
-            .exists()
-        ):
-            raise ValidationError(
-                "A user with this email address already exists. Please use a different email."
-            )
+        if self.instance.user and User.objects.filter(email=email).exclude(pk=self.instance.user.pk).exists():
+            raise ValidationError("A user with this email address already exists. Please use a different email.")
         return email
 
     def save(self, commit=True):
@@ -347,12 +312,8 @@ class RegularizationRequestForm(forms.ModelForm):
         fields = ["date", "check_in", "check_out", "reason"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-            "check_in": forms.TimeInput(
-                attrs={"type": "time", "class": "form-control"}
-            ),
-            "check_out": forms.TimeInput(
-                attrs={"type": "time", "class": "form-control"}
-            ),
+            "check_in": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
+            "check_out": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
             "reason": forms.Textarea(
                 attrs={
                     "class": "form-control",
@@ -380,12 +341,8 @@ class EmergencyContactForm(forms.ModelForm):
         model = EmergencyContact
         fields = ["name", "phone_number", "relationship", "is_primary"]
         widgets = {
-            "name": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "Full Name"}
-            ),
-            "phone_number": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "+91 1234567890"}
-            ),
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Full Name"}),
+            "phone_number": forms.TextInput(attrs={"class": "form-control", "placeholder": "+91 1234567890"}),
             "relationship": forms.TextInput(
                 attrs={
                     "class": "form-control",
@@ -405,7 +362,5 @@ class EmergencyContactForm(forms.ModelForm):
         phone = self.cleaned_data.get("phone_number")
         # Basic validation - you can enhance this
         if phone and len(phone) < 10:
-            raise ValidationError(
-                "Please enter a valid phone number with at least 10 digits."
-            )
+            raise ValidationError("Please enter a valid phone number with at least 10 digits.")
         return phone

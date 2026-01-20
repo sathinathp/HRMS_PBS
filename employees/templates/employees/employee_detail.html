@@ -337,6 +337,16 @@
                 <span><i class="fas fa-building"></i> {{ employee.department|default:"Dept N/A" }}</span>
                 <span><i class="fas fa-envelope"></i> {{ employee.user.email }}</span>
                 <span><i class="fas fa-id-badge"></i> {{ employee.badge_id|default:"-" }}</span>
+
+                {% if employee.date_of_joining %}
+                <span><i class="fas fa-calendar-check"></i> Joined: {{ employee.date_of_joining|date:"d M, Y" }}</span>
+                {% endif %}
+
+                {% if not employee.is_active and employee.exit_date %}
+                <span class="bg-danger bg-opacity-25" style="background: rgba(239, 68, 68, 0.3) !important;">
+                    <i class="fas fa-sign-out-alt"></i> Left: {{ employee.exit_date|date:"d M, Y" }}
+                </span>
+                {% endif %}
             </div>
         </div>
         <div class="ms-auto me-4 text-end">
@@ -398,18 +408,38 @@
                 <div class="p-3 border-bottom bg-white d-flex justify-content-between align-items-center">
                     <h5 class="m-0 fw-bold text-dark"><i class="fas fa-history me-2 text-primary"></i> Attendance Log
                     </h5>
-                    <!-- Month Filter stub -->
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
-                            data-bs-toggle="dropdown">
-                            {{ current_month }}
-                        </button>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="?month=1&year={{ current_year }}">January</a></li>
-                            <!-- Using simple links for now, could be dynamic -->
-                            <li><a class="dropdown-item" href="?month={{ 12 }}&year={{ current_year }}">December</a>
-                            </li>
-                        </ul>
+                    <div class="d-flex align-items-center">
+                        <div class="btn-group me-2">
+                            <a href="?month=1&year={{ current_year|add:'-1' }}" class="btn btn-sm btn-outline-secondary"
+                                title="Previous Year">
+                                <i class="fas fa-chevron-left"></i>
+                            </a>
+                            <span class="btn btn-sm btn-outline-secondary disabled" style="background: #f8f9fa;">{{ current_year }}</span>
+                            <a href="?month=1&year={{ current_year|add:'1' }}" class="btn btn-sm btn-outline-secondary"
+                                title="Next Year">
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                                data-bs-toggle="dropdown">
+                                {{ current_month }}
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="?month=1&year={{ current_year }}">January</a></li>
+                                <li><a class="dropdown-item" href="?month=2&year={{ current_year }}">February</a></li>
+                                <li><a class="dropdown-item" href="?month=3&year={{ current_year }}">March</a></li>
+                                <li><a class="dropdown-item" href="?month=4&year={{ current_year }}">April</a></li>
+                                <li><a class="dropdown-item" href="?month=5&year={{ current_year }}">May</a></li>
+                                <li><a class="dropdown-item" href="?month=6&year={{ current_year }}">June</a></li>
+                                <li><a class="dropdown-item" href="?month=7&year={{ current_year }}">July</a></li>
+                                <li><a class="dropdown-item" href="?month=8&year={{ current_year }}">August</a></li>
+                                <li><a class="dropdown-item" href="?month=9&year={{ current_year }}">September</a></li>
+                                <li><a class="dropdown-item" href="?month=10&year={{ current_year }}">October</a></li>
+                                <li><a class="dropdown-item" href="?month=11&year={{ current_year }}">November</a></li>
+                                <li><a class="dropdown-item" href="?month=12&year={{ current_year }}">December</a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
                 <div class="table-responsive">
@@ -589,7 +619,7 @@
     });
 
     function drawMap(mapData) {
-        console.log('=== drawMap called ===');
+        console.log(' === drawMap called === ');
         console.log('mapData:', mapData);
         console.log('mapData type:', typeof mapData);
         console.log('mapData length:', mapData ? mapData.length : 'null/undefined');

@@ -1,11 +1,13 @@
-from django.db import models
-from django.conf import settings
-from django.utils import timezone
-from companies.models import Company
 from datetime import timedelta
-from loguru import logger
+
+from django.conf import settings
+from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
+from loguru import logger
+
+from companies.models import Company
 
 
 class Employee(models.Model):
@@ -14,9 +16,7 @@ class Employee(models.Model):
         on_delete=models.CASCADE,
         related_name="employee_profile",
     )
-    company = models.ForeignKey(
-        Company, on_delete=models.CASCADE, related_name="employees"
-    )
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="employees")
     manager = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -24,36 +24,30 @@ class Employee(models.Model):
         blank=True,
         related_name="subordinates_user",
     )
-    profile_picture = models.ImageField(
-        upload_to="employee_avatars/", null=True, blank=True
-    )
+    profile_picture = models.ImageField(upload_to="employee_avatars/", null=True, blank=True)
 
     # Personal Details
     mobile_number = models.CharField(max_length=15, blank=True, null=True)
     GENDER_CHOICES = [("M", "Male"), ("F", "Female"), ("O", "Other")]
-    gender = models.CharField(
-        max_length=1, choices=GENDER_CHOICES, blank=True, null=True
-    )
+    gender = models.CharField(max_length=1, choices=GENDER_CHOICES, blank=True, null=True)
     MARITAL_STATUS_CHOICES = [
         ("S", "Single"),
         ("M", "Married"),
         ("D", "Divorced"),
         ("W", "Widowed"),
     ]
-    marital_status = models.CharField(
-        max_length=1, choices=MARITAL_STATUS_CHOICES, blank=True, null=True
-    )
+    marital_status = models.CharField(max_length=1, choices=MARITAL_STATUS_CHOICES, blank=True, null=True)
     dob = models.DateField(verbose_name="Date of Birth", null=True, blank=True)
     permanent_address = models.TextField(blank=True, null=True)
+    current_address = models.TextField(blank=True, null=True, verbose_name="Current Address")
+    profile_edited = models.BooleanField(default=False, help_text="Has the employee edited their profile?")
     emergency_contact = models.CharField(
         max_length=100,
         blank=True,
         null=True,
         help_text="Legacy field - use EmergencyContact model instead",
     )
-    badge_id = models.CharField(
-        max_length=20, unique=True, null=True, verbose_name="Employee ID"
-    )
+    badge_id = models.CharField(max_length=20, unique=True, null=True, verbose_name="Employee ID")
 
     # Job Profile
     designation = models.CharField(max_length=100)
@@ -93,9 +87,7 @@ class Employee(models.Model):
     # Financial Details
     bank_name = models.CharField(max_length=100, blank=True, null=True)
     account_number = models.CharField(max_length=50, blank=True, null=True)
-    ifsc_code = models.CharField(
-        max_length=20, blank=True, null=True, verbose_name="IFSC Code"
-    )
+    ifsc_code = models.CharField(max_length=20, blank=True, null=True, verbose_name="IFSC Code")
     uan = models.CharField(max_length=20, blank=True, null=True, verbose_name="UAN")
     pf_enabled = models.BooleanField(default=False, verbose_name="Provident Fund")
     annual_ctc = models.DecimalField(
@@ -138,25 +130,15 @@ class Employee(models.Model):
 
     # Week-off Configuration (Individual employee week-offs)
     week_off_monday = models.BooleanField(default=False, help_text="Monday is week-off")
-    week_off_tuesday = models.BooleanField(
-        default=False, help_text="Tuesday is week-off"
-    )
-    week_off_wednesday = models.BooleanField(
-        default=False, help_text="Wednesday is week-off"
-    )
-    week_off_thursday = models.BooleanField(
-        default=False, help_text="Thursday is week-off"
-    )
+    week_off_tuesday = models.BooleanField(default=False, help_text="Tuesday is week-off")
+    week_off_wednesday = models.BooleanField(default=False, help_text="Wednesday is week-off")
+    week_off_thursday = models.BooleanField(default=False, help_text="Thursday is week-off")
     week_off_friday = models.BooleanField(default=False, help_text="Friday is week-off")
-    week_off_saturday = models.BooleanField(
-        default=True, help_text="Saturday is week-off"
-    )
+    week_off_saturday = models.BooleanField(default=True, help_text="Saturday is week-off")
     week_off_sunday = models.BooleanField(default=True, help_text="Sunday is week-off")
 
     # Email Notification Tracking
-    last_birthday_email_year = models.IntegerField(
-        null=True, blank=True, help_text="Year of last sent birthday email"
-    )
+    last_birthday_email_year = models.IntegerField(null=True, blank=True, help_text="Year of last sent birthday email")
     last_anniversary_email_year = models.IntegerField(
         null=True, blank=True, help_text="Year of last sent anniversary email"
     )
@@ -203,11 +185,7 @@ class Employee(models.Model):
                 prefix = f"{company_code}{location_code}"
 
             # Get the last employee with this prefix
-            last_employee = (
-                Employee.objects.filter(badge_id__startswith=prefix)
-                .order_by("-badge_id")
-                .first()
-            )
+            last_employee = Employee.objects.filter(badge_id__startswith=prefix).order_by("-badge_id").first()
 
             if last_employee and last_employee.badge_id:
                 # Extract the number part and increment
@@ -230,18 +208,14 @@ class EmergencyContact(models.Model):
     Model to store multiple emergency contacts for each employee
     """
 
-    employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name="emergency_contacts"
-    )
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="emergency_contacts")
     name = models.CharField(max_length=100, help_text="Full name of emergency contact")
     phone_number = models.CharField(max_length=15, help_text="Contact phone number")
     relationship = models.CharField(
         max_length=50,
         help_text="Relationship to employee (e.g., Spouse, Parent, Sibling)",
     )
-    is_primary = models.BooleanField(
-        default=False, help_text="Primary emergency contact"
-    )
+    is_primary = models.BooleanField(default=False, help_text="Primary emergency contact")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -251,30 +225,22 @@ class EmergencyContact(models.Model):
         verbose_name_plural = "Emergency Contacts"
 
     def __str__(self):
-        return (
-            f"{self.name} ({self.relationship}) - {self.employee.user.get_full_name()}"
-        )
+        return f"{self.name} ({self.relationship}) - {self.employee.user.get_full_name()}"
 
     def save(self, *args, **kwargs):
         """Ensure only one primary contact per employee"""
         if self.is_primary:
             # Set all other contacts for this employee to non-primary
-            EmergencyContact.objects.filter(
-                employee=self.employee, is_primary=True
-            ).exclude(pk=self.pk).update(is_primary=False)
+            EmergencyContact.objects.filter(employee=self.employee, is_primary=True).exclude(pk=self.pk).update(
+                is_primary=False
+            )
         super().save(*args, **kwargs)
 
 
 class EmployeeIDProof(models.Model):
-    employee = models.OneToOneField(
-        Employee, on_delete=models.CASCADE, related_name="id_proofs"
-    )
-    aadhar_front = models.ImageField(
-        upload_to="id_proofs/aadhar/", null=True, blank=True
-    )
-    aadhar_back = models.ImageField(
-        upload_to="id_proofs/aadhar/", null=True, blank=True
-    )
+    employee = models.OneToOneField(Employee, on_delete=models.CASCADE, related_name="id_proofs")
+    aadhar_front = models.ImageField(upload_to="id_proofs/aadhar/", null=True, blank=True)
+    aadhar_back = models.ImageField(upload_to="id_proofs/aadhar/", null=True, blank=True)
     pan_card = models.ImageField(upload_to="id_proofs/pan/", null=True, blank=True)
 
     updated_at = models.DateTimeField(auto_now=True)
@@ -284,9 +250,7 @@ class EmployeeIDProof(models.Model):
 
 
 class Attendance(models.Model):
-    employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name="attendances"
-    )
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="attendances")
     date = models.DateField()
     clock_in = models.DateTimeField(null=True, blank=True)  # First clock-in of the day
     clock_out = models.DateTimeField(null=True, blank=True)  # Last clock-out of the day
@@ -306,45 +270,23 @@ class Attendance(models.Model):
     location_out = models.CharField(max_length=255, null=True, blank=True)
 
     # Early/Late tracking
-    is_late = models.BooleanField(
-        default=False, help_text="Marked late based on shift timing"
-    )
-    late_by_minutes = models.IntegerField(
-        default=0, help_text="Minutes late after grace period"
-    )
+    is_late = models.BooleanField(default=False, help_text="Marked late based on shift timing")
+    late_by_minutes = models.IntegerField(default=0, help_text="Minutes late after grace period")
 
-    total_working_hours = models.FloatField(
-        default=0.0, help_text="Total hours worked today across all sessions"
-    )
+    total_working_hours = models.FloatField(default=0.0, help_text="Total hours worked today across all sessions")
 
     # Grace Period Logic
-    is_grace_used = models.BooleanField(
-        default=False, help_text="Logged in late but within grace period"
-    )
-    is_half_day_late = models.BooleanField(
-        default=False, help_text="Marked as Half Day due to late login exceed"
-    )
+    is_grace_used = models.BooleanField(default=False, help_text="Logged in late but within grace period")
+    is_half_day_late = models.BooleanField(default=False, help_text="Marked as Half Day due to late login exceed")
 
-    is_early_departure = models.BooleanField(
-        default=False, help_text="Left before shift end time"
-    )
-    early_departure_minutes = models.IntegerField(
-        default=0, help_text="Minutes before shift end"
-    )
+    is_early_departure = models.BooleanField(default=False, help_text="Left before shift end time")
+    early_departure_minutes = models.IntegerField(default=0, help_text="Minutes before shift end")
 
     # Multiple click handling
-    clock_in_attempts = models.IntegerField(
-        default=0, help_text="Number of clock-in attempts (max 3)"
-    )
-    daily_clock_count = models.IntegerField(
-        default=0, help_text="Number of valid clock-ins today"
-    )
-    is_currently_clocked_in = models.BooleanField(
-        default=False, help_text="Currently clocked in status"
-    )
-    max_daily_clocks = models.IntegerField(
-        default=3, help_text="Maximum allowed clock-ins per day"
-    )
+    clock_in_attempts = models.IntegerField(default=0, help_text="Number of clock-in attempts (max 3)")
+    daily_clock_count = models.IntegerField(default=0, help_text="Number of valid clock-ins today")
+    is_currently_clocked_in = models.BooleanField(default=False, help_text="Currently clocked in status")
+    max_daily_clocks = models.IntegerField(default=3, help_text="Maximum allowed clock-ins per day")
 
     # Working hours tracking
     total_working_hours = models.DecimalField(
@@ -363,12 +305,8 @@ class Attendance(models.Model):
     )
 
     # Session tracking
-    daily_sessions_count = models.IntegerField(
-        default=0, help_text="Number of sessions today"
-    )
-    max_daily_sessions = models.IntegerField(
-        default=3, help_text="Maximum allowed sessions per day"
-    )
+    daily_sessions_count = models.IntegerField(default=0, help_text="Number of sessions today")
+    max_daily_sessions = models.IntegerField(default=3, help_text="Maximum allowed sessions per day")
     current_session_type = models.CharField(
         max_length=20,
         null=True,
@@ -405,18 +343,16 @@ class Attendance(models.Model):
     def calculate_late_arrival(self):
         """Calculate if employee is late based on their shift schedule and location timezone"""
         from datetime import datetime, timedelta
+
         import pytz
+
         from companies.models import ShiftSchedule
 
         if not self.clock_in:
             return
 
         # Get location timezone
-        tz_name = (
-            self.employee.location.timezone
-            if self.employee.location
-            else "Asia/Kolkata"
-        )
+        tz_name = self.employee.location.timezone if self.employee.location else "Asia/Kolkata"
         local_tz = pytz.timezone(tz_name)
 
         # Convert clock_in to local timezone
@@ -433,9 +369,7 @@ class Attendance(models.Model):
                     name__iexact=self.employee.shift_schedule,
                 ).first()
             if not shift:
-                shift = ShiftSchedule.objects.filter(
-                    company=self.employee.company
-                ).first()
+                shift = ShiftSchedule.objects.filter(company=self.employee.company).first()
 
         if not shift:
             return
@@ -480,9 +414,7 @@ class Attendance(models.Model):
                         # We still mark grace used as they essentially used the time
                         self.is_grace_used = True
                     elif shift.grace_exceeded_action == "LOP":
-                        self.is_half_day_late = (
-                            True  # Using same flag but status might be different?
-                        )
+                        self.is_half_day_late = True  # Using same flag but status might be different?
                         if self.status not in ["ON_DUTY", "WFH", "LEAVE"]:
                             self.status = "ABSENT"  # Or specific LOP status
                         self.is_grace_used = True
@@ -497,26 +429,21 @@ class Attendance(models.Model):
             else:
                 # 2. Strictly Late (Beyond Grace)
                 self.is_late = True
-                self.late_by_minutes = int(
-                    (clock_in_dt - grace_end_dt).total_seconds() / 60
-                )
+                self.late_by_minutes = int((clock_in_dt - grace_end_dt).total_seconds() / 60)
                 # Usually Late Logic doesn't check grace count, you are just late.
                 # But typically Late also implies "missed grace".
 
     def calculate_early_departure(self):
         """Calculate if employee left early based on location timezone"""
         from datetime import datetime
+
         import pytz
 
         if not self.clock_out:
             return
 
         # Get location timezone
-        tz_name = (
-            self.employee.location.timezone
-            if self.employee.location
-            else "Asia/Kolkata"
-        )
+        tz_name = self.employee.location.timezone if self.employee.location else "Asia/Kolkata"
         local_tz = pytz.timezone(tz_name)
 
         # Convert clock_out to local timezone
@@ -549,9 +476,7 @@ class Attendance(models.Model):
 
         if clock_out_dt < threshold_dt:
             self.is_early_departure = True
-            self.early_departure_minutes = int(
-                (threshold_dt - clock_out_dt).total_seconds() / 60
-            )
+            self.early_departure_minutes = int((threshold_dt - clock_out_dt).total_seconds() / 60)
         else:
             self.is_early_departure = False
             self.early_departure_minutes = 0
@@ -648,14 +573,12 @@ class Attendance(models.Model):
 
     def get_combined_session_summary(self):
         """Get a summary of all sessions combined for the day"""
-        sessions = AttendanceSession.objects.filter(
-            employee=self.employee, date=self.date
-        ).order_by("session_number")
+        sessions = AttendanceSession.objects.filter(employee=self.employee, date=self.date).order_by("session_number")
 
     def calculate_total_working_hours(self):
         """Calculate total working hours from all completed sessions with 24-hour daily cap"""
-        from decimal import Decimal
         from datetime import datetime, time
+        from decimal import Decimal
 
         sessions = AttendanceSession.objects.filter(
             employee=self.employee,
@@ -723,13 +646,9 @@ class Attendance(models.Model):
         # Can only clock out if currently clocked in
         return self.is_currently_clocked_in
 
-        completed_sessions = sessions.filter(
-            clock_in__isnull=False, clock_out__isnull=False
-        )
+        completed_sessions = sessions.filter(clock_in__isnull=False, clock_out__isnull=False)
 
-        active_sessions = sessions.filter(
-            clock_in__isnull=False, clock_out__isnull=True
-        )
+        active_sessions = sessions.filter(clock_in__isnull=False, clock_out__isnull=True)
 
         total_minutes = 0
         for session in completed_sessions:
@@ -745,12 +664,9 @@ class Attendance(models.Model):
             "active_sessions": active_sessions.count(),
             "total_worked_hours": round(worked_hours, 2),
             "expected_hours": expected_hours,
-            "completion_percentage": round((worked_hours / expected_hours) * 100, 1)
-            if expected_hours > 0
-            else 0,
+            "completion_percentage": round((worked_hours / expected_hours) * 100, 1) if expected_hours > 0 else 0,
             "remaining_hours": max(0, expected_hours - worked_hours),
-            "is_shift_complete": worked_hours
-            >= expected_hours * 0.9,  # 90% completion threshold
+            "is_shift_complete": worked_hours >= expected_hours * 0.9,  # 90% completion threshold
         }
 
     def calculate_total_working_hours(self):
@@ -867,31 +783,19 @@ class Attendance(models.Model):
 class AttendanceSession(models.Model):
     """Individual clock-in/clock-out sessions within a day"""
 
-    employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name="attendance_sessions"
-    )
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="attendance_sessions")
     date = models.DateField()
-    session_number = models.IntegerField(
-        help_text="Session number for the day (1, 2, 3)"
-    )
+    session_number = models.IntegerField(help_text="Session number for the day (1, 2, 3)")
 
     # Session timing
     clock_in = models.DateTimeField()
     clock_out = models.DateTimeField(null=True, blank=True)
 
     # Location coordinates (matching existing structure)
-    clock_in_latitude = models.DecimalField(
-        max_digits=10, decimal_places=7, null=True, blank=True
-    )
-    clock_in_longitude = models.DecimalField(
-        max_digits=10, decimal_places=7, null=True, blank=True
-    )
-    clock_out_latitude = models.DecimalField(
-        max_digits=10, decimal_places=7, null=True, blank=True
-    )
-    clock_out_longitude = models.DecimalField(
-        max_digits=10, decimal_places=7, null=True, blank=True
-    )
+    clock_in_latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    clock_in_longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    clock_out_latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    clock_out_longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
 
     # Session type and status
     SESSION_TYPE_CHOICES = [
@@ -903,9 +807,7 @@ class AttendanceSession(models.Model):
     location_validated = models.BooleanField(default=False)
 
     # Session duration (in minutes to match existing structure)
-    duration_minutes = models.IntegerField(
-        default=0, help_text="Duration of this session in minutes"
-    )
+    duration_minutes = models.IntegerField(default=0, help_text="Duration of this session in minutes")
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -954,15 +856,11 @@ class AttendanceSession(models.Model):
 class SessionLocationLog(models.Model):
     """Location tracking for specific attendance sessions"""
 
-    session = models.ForeignKey(
-        AttendanceSession, on_delete=models.CASCADE, related_name="location_logs"
-    )
+    session = models.ForeignKey(AttendanceSession, on_delete=models.CASCADE, related_name="location_logs")
     timestamp = models.DateTimeField(auto_now_add=True)
     latitude = models.DecimalField(max_digits=10, decimal_places=7)
     longitude = models.DecimalField(max_digits=10, decimal_places=7)
-    accuracy = models.FloatField(
-        null=True, blank=True, help_text="GPS accuracy in meters"
-    )
+    accuracy = models.FloatField(null=True, blank=True, help_text="GPS accuracy in meters")
 
     class Meta:
         ordering = ["-timestamp"]
@@ -972,9 +870,7 @@ class SessionLocationLog(models.Model):
 
 
 class LocationLog(models.Model):
-    employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name="location_logs"
-    )
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="location_logs")
     attendance_session = models.ForeignKey(
         "AttendanceSession",
         on_delete=models.CASCADE,
@@ -993,20 +889,12 @@ class LocationLog(models.Model):
         ("HOURLY", "Hourly Tracking"),
         ("MANUAL", "Manual Update"),
     ]
-    log_type = models.CharField(
-        max_length=20, choices=LOG_TYPE_CHOICES, default="MANUAL"
-    )
-    accuracy = models.FloatField(
-        null=True, blank=True, help_text="GPS accuracy in meters"
-    )
-    address = models.TextField(
-        null=True, blank=True, help_text="Reverse geocoded address"
-    )
+    log_type = models.CharField(max_length=20, choices=LOG_TYPE_CHOICES, default="MANUAL")
+    accuracy = models.FloatField(null=True, blank=True, help_text="GPS accuracy in meters")
+    address = models.TextField(null=True, blank=True, help_text="Reverse geocoded address")
 
     # Tracking status
-    is_valid = models.BooleanField(
-        default=True, help_text="Whether this location is valid"
-    )
+    is_valid = models.BooleanField(default=True, help_text="Whether this location is valid")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1021,17 +909,11 @@ class LocationLog(models.Model):
 
 
 class LeaveBalance(models.Model):
-    employee = models.OneToOneField(
-        Employee, on_delete=models.CASCADE, related_name="leave_balance"
-    )
+    employee = models.OneToOneField(Employee, on_delete=models.CASCADE, related_name="leave_balance")
 
     # Leave Allocations
-    casual_leave_allocated = models.FloatField(
-        default=12.0, help_text="Total CL allocated per year"
-    )
-    sick_leave_allocated = models.FloatField(
-        default=12.0, help_text="Total SL allocated per year"
-    )
+    casual_leave_allocated = models.FloatField(default=12.0, help_text="Total CL allocated per year")
+    sick_leave_allocated = models.FloatField(default=12.0, help_text="Total SL allocated per year")
 
     # Leave Used
     casual_leave_used = models.FloatField(default=0.0)
@@ -1039,9 +921,7 @@ class LeaveBalance(models.Model):
     unpaid_leave = models.FloatField(default=0.0)
 
     # Carry forward / Lapsed
-    carry_forward_leave = models.FloatField(
-        default=0.0, help_text="Leave carried from previous year"
-    )
+    carry_forward_leave = models.FloatField(default=0.0, help_text="Leave carried from previous year")
     lapsed_leave = models.FloatField(default=0.0, help_text="Leave that expired")
 
     updated_at = models.DateTimeField(auto_now=True)
@@ -1132,23 +1012,17 @@ class LeaveRequest(models.Model):
         ("HR", "HR/Admin"),
     ]
 
-    employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name="leave_requests"
-    )
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="leave_requests")
     leave_type = models.CharField(max_length=2, choices=LEAVE_TYPES)
     start_date = models.DateField()
     end_date = models.DateField()
     duration = models.CharField(max_length=4, choices=DURATION_CHOICES, default="FULL")
     reason = models.TextField(blank=True)
-    supporting_document = models.FileField(
-        upload_to="leave_documents/", null=True, blank=True
-    )
+    supporting_document = models.FileField(upload_to="leave_documents/", null=True, blank=True)
 
     # Status and Approval
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="PENDING")
-    approval_level = models.CharField(
-        max_length=10, choices=APPROVAL_LEVEL_CHOICES, default="MANAGER"
-    )
+    approval_level = models.CharField(max_length=10, choices=APPROVAL_LEVEL_CHOICES, default="MANAGER")
 
     # Admin/Manager Actions
     approved_by = models.ForeignKey(
@@ -1170,9 +1044,7 @@ class LeaveRequest(models.Model):
         blank=True,
         help_text="How the leave was approved",
     )
-    admin_comment = models.TextField(
-        blank=True, null=True, help_text="Admin/Manager remarks"
-    )
+    admin_comment = models.TextField(blank=True, null=True, help_text="Admin/Manager remarks")
     rejection_reason = models.TextField(blank=True, null=True)
 
     # Timestamps
@@ -1367,7 +1239,7 @@ class LeaveRequest(models.Model):
 
         except Exception as e:
             # Don't change status if deduction fails
-            print(f"Error approving leave: {e}")
+            logger.error(f"Error approving leave: {e}")
             return False
 
     def __str__(self):
@@ -1375,14 +1247,10 @@ class LeaveRequest(models.Model):
 
 
 class Payslip(models.Model):
-    employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name="payslips"
-    )
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="payslips")
     month = models.DateField(help_text="Select any date in the month")
     pdf_file = models.FileField(upload_to="payslips/", null=True, blank=True)
-    net_salary = models.DecimalField(
-        max_digits=10, decimal_places=2, null=True, blank=True
-    )
+    net_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     generated_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1431,14 +1299,10 @@ class RegularizationRequest(models.Model):
         ("CANCELLED", "Cancelled"),
     ]
 
-    employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name="regularization_requests"
-    )
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="regularization_requests")
     date = models.DateField(help_text="Date to be regularized")
     check_in = models.TimeField(null=True, blank=True, verbose_name="New Check-In Time")
-    check_out = models.TimeField(
-        null=True, blank=True, verbose_name="New Check-Out Time"
-    )
+    check_out = models.TimeField(null=True, blank=True, verbose_name="New Check-Out Time")
     reason = models.TextField(help_text="Reason for regularization")
 
     # Status
@@ -1453,9 +1317,7 @@ class RegularizationRequest(models.Model):
         related_name="approved_regularizations",
     )
     approved_at = models.DateTimeField(null=True, blank=True)
-    manager_comment = models.TextField(
-        blank=True, null=True, verbose_name="Manager Remarks"
-    )
+    manager_comment = models.TextField(blank=True, null=True, verbose_name="Manager Remarks")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1486,12 +1348,8 @@ class ExitInitiative(models.Model):
         ("COMPLETED", "Completed"),  # Employee has left
     ]
 
-    employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name="exit_initiatives"
-    )
-    exit_type = models.CharField(
-        max_length=20, choices=EXIT_TYPE_CHOICES, help_text="Type of exit"
-    )
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="exit_initiatives")
+    exit_type = models.CharField(max_length=20, choices=EXIT_TYPE_CHOICES, help_text="Type of exit")
     submission_date = models.DateField(help_text="Date when exit was initiated")
     exit_note = models.TextField(help_text="Reason for exit")
 
@@ -1503,9 +1361,7 @@ class ExitInitiative(models.Model):
     )
 
     # Last working day
-    last_working_day = models.DateField(
-        null=True, blank=True, help_text="Calculated or approved last working day"
-    )
+    last_working_day = models.DateField(null=True, blank=True, help_text="Calculated or approved last working day")
 
     # Approval workflow (for resignations)
     status = models.CharField(
@@ -1522,9 +1378,7 @@ class ExitInitiative(models.Model):
         related_name="approved_exits",
     )
     approved_at = models.DateTimeField(null=True, blank=True)
-    rejection_reason = models.TextField(
-        blank=True, null=True, help_text="Reason for rejection (if applicable)"
-    )
+    rejection_reason = models.TextField(blank=True, null=True, help_text="Reason for rejection (if applicable)")
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1545,6 +1399,7 @@ class ExitInitiative(models.Model):
         - For absconding/termination: submission date + notice period
         """
         from datetime import timedelta
+
         from dateutil.relativedelta import relativedelta
 
         if self.exit_type == "RESIGNATION" and self.approved_at:
@@ -1552,9 +1407,7 @@ class ExitInitiative(models.Model):
             self.last_working_day = self.approved_at.date() + relativedelta(months=2)
         elif self.exit_type in ["ABSCONDED", "TERMINATED"] and self.notice_period_days:
             # Submission date + notice period
-            self.last_working_day = self.submission_date + timedelta(
-                days=self.notice_period_days
-            )
+            self.last_working_day = self.submission_date + timedelta(days=self.notice_period_days)
 
         return self.last_working_day
 
@@ -1569,7 +1422,7 @@ def create_leave_balance(sender, instance, created, **kwargs):
         LeaveBalance.objects.get_or_create(
             employee=instance,
             defaults={
-                'casual_leave_allocated': 0.0,
-                'sick_leave_allocated': 0.0,
-            }
+                "casual_leave_allocated": 0.0,
+                "sick_leave_allocated": 0.0,
+            },
         )

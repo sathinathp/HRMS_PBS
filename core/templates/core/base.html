@@ -563,15 +563,20 @@
                     class="{% if 'regularization/requests' in request.path %}active{% endif %}">
                     <i class="fas fa-check-double"></i> Regularization Requests
                 </a>
-                <a href="{% url 'exit_initiatives_list' %}"
-                    class="{% if 'exit-initiatives' in request.path %}active{% endif %}">
-                    <i class="fas fa-door-open"></i> Exit Initiatives
-                </a>
+
                 <a href="{% url 'leave_history' %}" class="{% if 'history' in request.path %}active{% endif %}">
                     <i class="fas fa-history"></i> Leave History
                 </a>
             </div>
         </div>
+        {% endif %}
+
+        <!-- Exit Initiatives -->
+        {% if user.role == 'COMPANY_ADMIN' or user.role == 'MANAGER' %}
+        <a href="{% url 'exit_initiatives_list' %}"
+            class="{% if 'exit-initiatives' in request.path %}active{% endif %}">
+            <i class="fas fa-door-open"></i> <span>Exit Initiatives</span>
+        </a>
         {% endif %}
 
         {% if user.role == 'COMPANY_ADMIN' %}
@@ -848,7 +853,7 @@
                                 }
                             } else if (data.status === 'tracking_inactive') {
                                 // User not clocked in, that's fine.
-                                // We can increase the interval to check less frequently if not clocked in, 
+                                // We can increase the interval to check less frequently if not clocked in,
                                 // but for simplicity keeping it constant.
                             }
                         })

@@ -840,8 +840,7 @@
                                 <div>
                                     <div>{{ employee.user.get_full_name }}
                                         {% if not employee.is_active %}
-                                        <span class="status-badge-inactive">{{ employee.get_employment_status_display
-                                            }}</span>
+                                        <span class="status-badge-inactive">{{ employee.get_employment_status_display }}</span>
                                         {% endif %}
                                     </div>
                                     <div class="employee-email">{{ employee.user.email }}</div>

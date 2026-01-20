@@ -1,8 +1,10 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from .models import Employee
+
 from companies.models import Company, ShiftSchedule
+
+from .models import Employee
 
 User = get_user_model()
 
@@ -20,9 +22,7 @@ class PersonalInfoForm(forms.ModelForm):
         ("MANAGER", "Manager"),
         ("COMPANY_ADMIN", "Admin"),
     ]
-    role = forms.ChoiceField(
-        choices=ROLE_CHOICES, widget=forms.RadioSelect, initial="EMPLOYEE", label="Role"
-    )
+    role = forms.ChoiceField(choices=ROLE_CHOICES, widget=forms.RadioSelect, initial="EMPLOYEE", label="Role")
 
     # Company selection
     company_selection = forms.ModelChoiceField(
@@ -58,9 +58,7 @@ class PersonalInfoForm(forms.ModelForm):
 
         # Company Isolation Logic
         if self.user and self.user.role == User.Role.COMPANY_ADMIN:
-            self.fields["company_selection"].queryset = Company.objects.filter(
-                pk=self.user.company.id
-            )
+            self.fields["company_selection"].queryset = Company.objects.filter(pk=self.user.company.id)
             self.fields["company_selection"].initial = self.user.company
             self.fields["company_selection"].widget.attrs["disabled"] = "disabled"
             self.fields["company_selection"].required = False
@@ -68,18 +66,14 @@ class PersonalInfoForm(forms.ModelForm):
             # Filter locations by company
             from companies.models import Location
 
-            self.fields["location"].queryset = Location.objects.filter(
-                company=self.user.company, is_active=True
-            )
+            self.fields["location"].queryset = Location.objects.filter(company=self.user.company, is_active=True)
             self.fields["location"].required = True
             self.fields["location"].label = "Work Location"
 
     def clean_email(self):
         email = self.cleaned_data.get("email")
         if User.objects.filter(email=email).exists():
-            raise ValidationError(
-                "A user with this email address already exists. Please use a different email."
-            )
+            raise ValidationError("A user with this email address already exists. Please use a different email.")
 
         # Domain Validation
         company = self.cleaned_data.get("company_selection")
@@ -119,13 +113,11 @@ class JobDetailsForm(forms.ModelForm):
         label="Designation",
     )
 
-    manager_selection = (
-        forms.ModelChoiceField(  # Renamed from manager to avoid conflict
-            queryset=Employee.objects.none(),
-            required=False,
-            widget=forms.Select(attrs={"class": "form-select"}),
-            label="Reporting Manager",
-        )
+    manager_selection = forms.ModelChoiceField(  # Renamed from manager to avoid conflict
+        queryset=Employee.objects.none(),
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+        label="Reporting Manager",
     )
     department = forms.ModelChoiceField(
         queryset=Employee.objects.none(),
@@ -160,9 +152,12 @@ class JobDetailsForm(forms.ModelForm):
 
         # Get company object from ID
         if company_id:
-            from companies.models import Company, Designation, Department
+            from companies.models import Company, Department, Designation
 
             self.company = Company.objects.get(id=company_id)
+        elif self.user and self.user.role == User.Role.COMPANY_ADMIN:
+            # Fallback to user's company if not provided explicitly
+            self.company = self.user.company
         else:
             self.company = None
 
@@ -174,22 +169,16 @@ class JobDetailsForm(forms.ModelForm):
                     user__role=User.Role.EMPLOYEE
                 ).select_related("company", "user")
             else:
-                self.fields["manager_selection"].queryset = Employee.objects.filter(
-                    company=self.company
-                ).exclude(user__role=User.Role.EMPLOYEE)
+                self.fields["manager_selection"].queryset = Employee.objects.filter(company=self.company).exclude(
+                    user__role=User.Role.EMPLOYEE
+                )
 
             # Populate Dynamic Fields
-            from companies.models import Designation, Department
+            from companies.models import Department, Designation
 
-            self.fields["designation"].queryset = Designation.objects.filter(
-                company=self.company
-            )
-            self.fields["department"].queryset = Department.objects.filter(
-                company=self.company
-            )
-            self.fields["shift_schedule"].queryset = ShiftSchedule.objects.filter(
-                company=self.company
-            )
+            self.fields["designation"].queryset = Designation.objects.filter(company=self.company)
+            self.fields["department"].queryset = Department.objects.filter(company=self.company)
+            self.fields["shift_schedule"].queryset = ShiftSchedule.objects.filter(company=self.company).order_by("name")
 
             # Set initial if data comes from session as name/ID
             # The form initialization with 'initial' dict handles basic mapping if keys match.
@@ -204,18 +193,14 @@ class JobDetailsForm(forms.ModelForm):
                 # Handle designation - can be ID or name
                 if initial.get("designation_id"):
                     try:
-                        desig = Designation.objects.filter(
-                            company=self.company, id=initial["designation_id"]
-                        ).first()
+                        desig = Designation.objects.filter(company=self.company, id=initial["designation_id"]).first()
                         if desig:
                             self.initial["designation"] = desig
                     except:
                         pass
                 elif isinstance(initial.get("designation"), str):
                     try:
-                        desig = Designation.objects.filter(
-                            company=self.company, name=initial["designation"]
-                        ).first()
+                        desig = Designation.objects.filter(company=self.company, name=initial["designation"]).first()
                         if desig:
                             self.initial["designation"] = desig
                     except:
@@ -224,18 +209,14 @@ class JobDetailsForm(forms.ModelForm):
                 # Handle department - can be ID or name
                 if initial.get("department_id"):
                     try:
-                        dept = Department.objects.filter(
-                            company=self.company, id=initial["department_id"]
-                        ).first()
+                        dept = Department.objects.filter(company=self.company, id=initial["department_id"]).first()
                         if dept:
                             self.initial["department"] = dept
                     except:
                         pass
                 elif isinstance(initial.get("department"), str):
                     try:
-                        dept = Department.objects.filter(
-                            company=self.company, name=initial["department"]
-                        ).first()
+                        dept = Department.objects.filter(company=self.company, name=initial["department"]).first()
                         if dept:
                             self.initial["department"] = dept
                     except:
