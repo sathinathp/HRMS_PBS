@@ -3106,3 +3106,93 @@ def reset_password_view(request):
         form = ResetPasswordForm()
 
     return render(request, "core/reset_password.html", {"form": form})
+
+
+# ==================== Notification Views ====================
+
+
+@login_required
+def get_notifications(request):
+    """
+    API endpoint to get notifications for the current user
+    """
+    from django.http import JsonResponse
+
+    from .models import Notification
+
+    if request.user.role not in ["COMPANY_ADMIN", "MANAGER"]:
+        return JsonResponse({"notifications": [], "count": 0})
+
+    notifications = Notification.objects.filter(recipient=request.user).order_by("-created_at")[:20]
+
+    notifications_data = []
+    for notif in notifications:
+        notifications_data.append(
+            {
+                "id": notif.id,
+                "type": notif.notification_type,
+                "message": notif.message,
+                "is_read": notif.is_read,
+                "created_at": notif.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "url": get_notification_url(notif),
+            }
+        )
+
+    unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+
+    return JsonResponse({"notifications": notifications_data, "count": unread_count})
+
+
+@login_required
+def mark_notification_read(request, notification_id):
+    """
+    Mark a notification as read
+    """
+    from django.http import JsonResponse
+    from django.utils import timezone
+
+    from .models import Notification
+
+    try:
+        notification = Notification.objects.get(id=notification_id, recipient=request.user)
+        notification.is_read = True
+        notification.read_at = timezone.now()
+        notification.save()
+
+        unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+
+        return JsonResponse({"success": True, "unread_count": unread_count})
+    except Notification.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Notification not found"}, status=404)
+
+
+@login_required
+def mark_all_notifications_read(request):
+    """
+    Mark all notifications as read for the current user
+    """
+    from django.http import JsonResponse
+    from django.utils import timezone
+
+    from .models import Notification
+
+    if request.method == "POST":
+        Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True, read_at=timezone.now())
+
+        return JsonResponse({"success": True, "unread_count": 0})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"}, status=400)
+
+
+def get_notification_url(notification):
+    """
+    Helper function to get the URL for a notification based on its type
+    """
+    from django.urls import reverse
+
+    if notification.notification_type == "LEAVE_REQUEST":
+        return reverse("leave_requests")
+    elif notification.notification_type == "REGULARIZATION_REQUEST":
+        return reverse("regularization_list")
+
+    return "#"

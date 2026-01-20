@@ -9,6 +9,8 @@ class CoreConfig(AppConfig):
         """Called when Django starts - start the email scheduler service"""
         import os
 
+        # Import signals to register them
+
         # Only start scheduler in main process, not in reloader process
         if os.environ.get("RUN_MAIN") == "true" or os.environ.get("RUN_MAIN") is None:
             try:
