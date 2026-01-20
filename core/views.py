@@ -3099,9 +3099,15 @@ def get_notifications(request):
     """
     from django.http import JsonResponse
 
+    from accounts.models import User
+
     from .models import Notification
 
-    if request.user.role not in ["COMPANY_ADMIN", "MANAGER"]:
+    # Only allow managers, admins, and HR department users to see notifications
+    emp = getattr(request.user, "employee_profile", None)
+    is_hr = emp and str(getattr(emp, "department", "")).upper() == "HR"
+
+    if request.user.role not in [User.Role.COMPANY_ADMIN, User.Role.MANAGER] and not is_hr:
         return JsonResponse({"notifications": [], "count": 0})
 
     notifications = Notification.objects.filter(recipient=request.user).order_by("-created_at")[:20]
