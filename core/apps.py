@@ -10,6 +10,7 @@ class CoreConfig(AppConfig):
         import os
 
         # Import signals to register them
+        import core.signals  # noqa: F401
 
         # Only start scheduler in main process, not in reloader process
         if os.environ.get("RUN_MAIN") == "true" or os.environ.get("RUN_MAIN") is None:

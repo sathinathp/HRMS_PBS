@@ -14,16 +14,24 @@ def create_leave_request_notification(sender, instance, created, **kwargs):
     Create notification when a new leave request is submitted
     """
     if created and instance.status == "PENDING":
-        # Get the employee's manager and company admins
         recipients = []
-
         # Add manager if exists
         if instance.employee.manager:
             recipients.append(instance.employee.manager)
 
         # Add all company admins
-        company_admins = User.objects.filter(company=instance.employee.company, role="COMPANY_ADMIN", is_active=True)
+        company_admins = User.objects.filter(
+            company=instance.employee.company, role=User.Role.COMPANY_ADMIN, is_active=True
+        )
         recipients.extend(list(company_admins))
+
+        # Add HR department users (some might be employees but handle HR tasks)
+        hr_users = User.objects.filter(
+            company=instance.employee.company,
+            employee_profile__department__iexact="HR",
+            is_active=True,
+        )
+        recipients.extend(list(hr_users))
 
         # Remove duplicates
         recipients = list(set(recipients))
@@ -49,16 +57,24 @@ def create_regularization_request_notification(sender, instance, created, **kwar
     Create notification when a new regularization request is submitted
     """
     if created and instance.status == "PENDING":
-        # Get the employee's manager and company admins
         recipients = []
-
         # Add manager if exists
         if instance.employee.manager:
             recipients.append(instance.employee.manager)
 
         # Add all company admins
-        company_admins = User.objects.filter(company=instance.employee.company, role="COMPANY_ADMIN", is_active=True)
+        company_admins = User.objects.filter(
+            company=instance.employee.company, role=User.Role.COMPANY_ADMIN, is_active=True
+        )
         recipients.extend(list(company_admins))
+
+        # Add HR department users
+        hr_users = User.objects.filter(
+            company=instance.employee.company,
+            employee_profile__department__iexact="HR",
+            is_active=True,
+        )
+        recipients.extend(list(hr_users))
 
         # Remove duplicates
         recipients = list(set(recipients))
