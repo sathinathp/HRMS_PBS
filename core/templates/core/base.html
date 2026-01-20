@@ -421,6 +421,142 @@
         .search-results::-webkit-scrollbar-thumb:hover {
             background: #4f46e5;
         }
+
+        /* Notification Bell Styles */
+        #notificationBell {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #notificationBell:hover i {
+            color: #6366f1;
+            transform: scale(1.1);
+        }
+
+        #notificationBadge {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.1);
+            }
+        }
+
+        .notification-dropdown {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            width: 380px;
+            max-height: 500px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            z-index: 1050;
+            overflow: hidden;
+        }
+
+        .notification-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #e8ecf4;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+        }
+
+        .notification-header h6 {
+            font-weight: 700;
+            color: #1e2139;
+            font-size: 1rem;
+        }
+
+        #closeNotificationDropdown {
+            transition: all 0.2s ease;
+        }
+
+        #closeNotificationDropdown:hover {
+            color: #ef4444 !important;
+            transform: scale(1.1);
+        }
+
+        .notification-list {
+            max-height: 420px;
+            overflow-y: auto;
+        }
+
+        .notification-item {
+            padding: 14px 20px;
+            border-bottom: 1px solid #f1f3f5;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .notification-item:hover {
+            background: linear-gradient(90deg, rgba(99, 102, 241, 0.05) 0%, transparent 100%);
+        }
+
+        .notification-item.unread {
+            background: linear-gradient(90deg, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0.02) 100%);
+        }
+
+        .notification-item.unread::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: #6366f1;
+        }
+
+        .notification-item-content {
+            font-size: 0.9rem;
+            color: #4a5568;
+            line-height: 1.5;
+            margin-bottom: 4px;
+        }
+
+        .notification-item-time {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .notification-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .notification-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .notification-list::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 10px;
+        }
+
+        .notification-list::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
+
+        .notification-empty {
+            padding: 40px 20px;
+            text-align: center;
+            color: #94a3b8;
+        }
+
+        .notification-empty i {
+            font-size: 3rem;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -758,7 +894,42 @@
             {% endif %}
         </div>
         {% if request.user.is_authenticated %}
-        <div class="d-flex align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            {% if user.role == 'COMPANY_ADMIN' or user.role == 'MANAGER' %}
+            <!-- Notification Bell -->
+            <div class="position-relative" id="notificationContainer">
+                <button class="btn btn-link position-relative p-0" id="notificationBell" style="text-decoration: none;">
+                    <i class="fas fa-bell" style="font-size: 1.5rem; color: #6c7293;"></i>
+                    {% if unread_notification_count > 0 %}
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                        id="notificationBadge" style="font-size: 0.65rem;">
+                        {{ unread_notification_count }}
+                    </span>
+                    {% endif %}
+                </button>
+
+                <!-- Notification Dropdown -->
+                <div class="notification-dropdown" id="notificationDropdown" style="display: none;">
+                    <div class="notification-header">
+                        <h6 class="mb-0">Notifications</h6>
+                        <div class="d-flex align-items-center gap-2">
+                            <button class="btn btn-sm btn-link text-primary" id="markAllRead"
+                                style="font-size: 0.75rem;">Mark all as read</button>
+                            <button class="btn btn-link p-0" id="closeNotificationDropdown"
+                                style="font-size: 1.2rem; color: #94a3b8; line-height: 1;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="notification-list" id="notificationList">
+                        <div class="text-center py-3 text-muted">
+                            <i class="fas fa-spinner fa-spin"></i> Loading...
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="text-end me-3">
                 <div class="fw-bold text-dark">{{ request.user.first_name|default:request.user.username }}</div>
                 <div class="text-muted small" style="font-size: 0.8rem;">
@@ -848,7 +1019,7 @@
                                 }
                             } else if (data.status === 'tracking_inactive') {
                                 // User not clocked in, that's fine.
-                                // We can increase the interval to check less frequently if not clocked in, 
+                                // We can increase the interval to check less frequently if not clocked in,
                                 // but for simplicity keeping it constant.
                             }
                         })
@@ -1067,6 +1238,196 @@
         function navigateToEmployee(url) {
             window.location.href = url;
         }
+    </script>
+    {% endif %}
+
+    <!-- Notification System JavaScript -->
+    {% if user.role == 'COMPANY_ADMIN' or user.role == 'MANAGER' %}
+    <script>
+        const notificationBell = document.getElementById('notificationBell');
+        const notificationDropdown = document.getElementById('notificationDropdown');
+        const notificationList = document.getElementById('notificationList');
+        const notificationBadge = document.getElementById('notificationBadge');
+        const markAllReadBtn = document.getElementById('markAllRead');
+
+        let isDropdownOpen = false;
+
+        // Toggle dropdown
+        notificationBell.addEventListener('click', function (e) {
+            e.stopPropagation();
+            isDropdownOpen = !isDropdownOpen;
+
+            if (isDropdownOpen) {
+                notificationDropdown.style.display = 'block';
+                loadNotifications();
+            } else {
+                notificationDropdown.style.display = 'none';
+            }
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function (e) {
+            if (!document.getElementById('notificationContainer').contains(e.target)) {
+                notificationDropdown.style.display = 'none';
+                isDropdownOpen = false;
+            }
+        });
+
+        // Prevent dropdown from closing when clicking inside
+        notificationDropdown.addEventListener('click', function (e) {
+            e.stopPropagation();
+        });
+
+        // Close button handler
+        const closeNotificationBtn = document.getElementById('closeNotificationDropdown');
+        closeNotificationBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            notificationDropdown.style.display = 'none';
+            isDropdownOpen = false;
+        });
+
+        // Load notifications
+        function loadNotifications() {
+            fetch('/api/notifications/')
+                .then(response => response.json())
+                .then(data => {
+                    displayNotifications(data.notifications);
+                    updateBadge(data.count);
+                })
+                .catch(error => {
+                    console.error('Error loading notifications:', error);
+                    notificationList.innerHTML = `
+                        <div class="notification-empty">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <div>Error loading notifications</div>
+                        </div>
+                    `;
+                });
+        }
+
+        // Display notifications
+        function displayNotifications(notifications) {
+            if (notifications.length === 0) {
+                notificationList.innerHTML = `
+                    <div class="notification-empty">
+                        <i class="fas fa-bell-slash"></i>
+                        <div>No notifications</div>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            notifications.forEach(notif => {
+                const unreadClass = notif.is_read ? '' : 'unread';
+                const timeAgo = getTimeAgo(notif.created_at);
+
+                html += `
+                    <div class="notification-item ${unreadClass}" data-id="${notif.id}" data-url="${notif.url}">
+                        <div class="notification-item-content">${notif.message}</div>
+                        <div class="notification-item-time">${timeAgo}</div>
+                    </div>
+                `;
+            });
+
+            notificationList.innerHTML = html;
+
+            // Add click handlers to notification items
+            document.querySelectorAll('.notification-item').forEach(item => {
+                item.addEventListener('click', function () {
+                    const notifId = this.dataset.id;
+                    const url = this.dataset.url;
+
+                    markAsRead(notifId, () => {
+                        window.location.href = url;
+                    });
+                });
+            });
+        }
+
+        // Mark notification as read
+        function markAsRead(notificationId, callback) {
+            fetch(`/api/notifications/${notificationId}/read/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateBadge(data.unread_count);
+                        if (callback) callback();
+                    }
+                })
+                .catch(error => console.error('Error marking notification as read:', error));
+        }
+
+        // Mark all as read
+        markAllReadBtn.addEventListener('click', function () {
+            fetch('/api/notifications/mark-all-read/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateBadge(0);
+                        loadNotifications();
+                    }
+                })
+                .catch(error => console.error('Error marking all as read:', error));
+        });
+
+        // Update badge
+        function updateBadge(count) {
+            if (count > 0) {
+                if (notificationBadge) {
+                    notificationBadge.textContent = count;
+                    notificationBadge.style.display = 'inline-block';
+                } else {
+                    // Create badge if it doesn't exist
+                    const badge = document.createElement('span');
+                    badge.id = 'notificationBadge';
+                    badge.className = 'position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger';
+                    badge.style.fontSize = '0.65rem';
+                    badge.textContent = count;
+                    notificationBell.appendChild(badge);
+                }
+            } else {
+                if (notificationBadge) {
+                    notificationBadge.remove();
+                }
+            }
+        }
+
+        // Get time ago string
+        function getTimeAgo(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const seconds = Math.floor((now - date) / 1000);
+
+            if (seconds < 60) return 'Just now';
+            if (seconds < 3600) return Math.floor(seconds / 60) + ' minutes ago';
+            if (seconds < 86400) return Math.floor(seconds / 3600) + ' hours ago';
+            if (seconds < 604800) return Math.floor(seconds / 86400) + ' days ago';
+
+            return date.toLocaleDateString();
+        }
+
+        // Poll for new notifications every 30 seconds
+        setInterval(function () {
+            fetch('/api/notifications/')
+                .then(response => response.json())
+                .then(data => {
+                    updateBadge(data.count);
+                })
+                .catch(error => console.error('Error polling notifications:', error));
+        }, 30000);
     </script>
     {% endif %}
 
