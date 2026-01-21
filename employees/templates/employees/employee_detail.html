@@ -207,6 +207,21 @@
         color: #64748b;
     }
 
+    .status-holiday {
+        background: #e0f2fe;
+        color: #0369a1;
+    }
+
+    .status-missed {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .status-not-login {
+        background: #fef9c3;
+        color: #a16207;
+    }
+
     /* Exit Banner */
     .exit-banner {
         background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
@@ -414,7 +429,8 @@
                                 title="Previous Year">
                                 <i class="fas fa-chevron-left"></i>
                             </a>
-                            <span class="btn btn-sm btn-outline-secondary disabled" style="background: #f8f9fa;">{{ current_year }}</span>
+                            <span class="btn btn-sm btn-outline-secondary disabled" style="background: #f8f9fa;">{{
+                                current_year }}</span>
                             <a href="?month=1&year={{ current_year|add:'1' }}" class="btn btn-sm btn-outline-secondary"
                                 title="Next Year">
                                 <i class="fas fa-chevron-right"></i>
@@ -463,14 +479,27 @@
                                     <span class="status-badge status-wfh">WFH</span>
                                     {% elif att.status == 'LEAVE' %}
                                     <span class="status-badge status-leave">Leave</span>
+                                    {% elif att.status == 'WEEKLY_OFF' %}
+                                    <span class="status-badge status-absent">Week Off</span>
+                                    {% elif att.status == 'HOLIDAY' %}
+                                    <span class="status-badge status-holiday"
+                                        title="{{ att.holiday_name }}">Holiday</span>
+                                    {% elif att.status == 'MISSED' %}
+                                    <span class="status-badge status-missed">Missed</span>
+                                    {% elif att.status == 'NOT_LOGGED_IN' %}
+                                    <span class="status-badge status-not-login">Not Login</span>
                                     {% else %}
                                     <span class="status-badge status-absent">{{ att.status }}</span>
                                     {% endif %}
                                 </td>
                                 <td>
+                                    {% if att.id %}
                                     <a href="{% url 'attendance_map' att.id %}" class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-map-marked-alt me-1"></i> View Map
                                     </a>
+                                    {% else %}
+                                    <span class="text-muted small">-</span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {{ att.effective_hours|default:"-" }}
