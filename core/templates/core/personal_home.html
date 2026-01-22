@@ -1127,8 +1127,7 @@
                             {% if assigned_shift.breaks.all %}
                             {% for break_item in assigned_shift.breaks.all %}
                             <div class="fw-bold text-white" style="font-size: 0.85rem;">
-                                {{ break_item.name }}: {{ break_item.start_time|time:"H:i" }} - {{
-                                break_item.end_time|time:"H:i" }}
+                                {{ break_item.name }}: {{ break_item.start_time|time:"H:i" }} - {{ break_item.end_time|time:"H:i" }}
                             </div>
                             {% endfor %}
                             {% else %}
