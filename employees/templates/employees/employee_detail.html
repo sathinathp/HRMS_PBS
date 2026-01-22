@@ -870,10 +870,10 @@
 
                                 <!-- Present -->
                                 <div class="timeline-node">
-                                    <div class="timeline-dot active">
+                                    <div class="timeline-dot pulsing">
                                         <div class="timeline-dot-inner"></div>
                                     </div>
-                                    <div class="timeline-content">
+                                    <div class="timeline-content active-node">
                                         <span class="timeline-date">Today</span>
                                         <div class="timeline-title text-primary">Current Role</div>
                                         <div class="badge bg-primary-soft text-primary mt-1">
@@ -882,17 +882,25 @@
                                     </div>
                                 </div>
 
-                                <!-- Probation -->
+                                <!-- Probation Status (only show if completed) -->
+                                {% if probation_status == 'COMPLETED' or probation_status == 'COMPLETED_TODAY' %}
                                 <div class="timeline-node">
                                     <div class="timeline-dot active">
                                         <div class="timeline-dot-inner"></div>
                                     </div>
                                     <div class="timeline-content">
-                                        <span class="timeline-date">{% if probation_date %}{{ probation_date|date:"d M, Y" }}{% else %}Probation Status{% endif %}</span>
-                                        <div class="timeline-title">Confirmed Employee</div>
-                                        <div class="small text-muted">Permanent Staff</div>
+                                        <span class="timeline-date">{{ probation_date|date:"d M, Y" }}</span>
+                                        <div class="timeline-title">
+                                            {% if probation_status == 'COMPLETED_TODAY' %}
+                                                <span class="text-success">🎉 Probation Completed</span>
+                                            {% else %}
+                                                Probation Completed
+                                            {% endif %}
+                                        </div>
+                                        <div class="small text-muted">Confirmed Employee</div>
                                     </div>
                                 </div>
+                                {% endif %}
 
                                 <!-- Joining Date -->
                                 <div class="timeline-node">
@@ -900,9 +908,9 @@
                                         <div class="timeline-dot-inner"></div>
                                     </div>
                                     <div class="timeline-content">
-                                        <span class="timeline-date">{{ employee.date_of_joining|date:"M d, Y"|default:"-" }}</span>
+                                        <span class="timeline-date">{{ employee.date_of_joining|date:"d M, Y"|default:"-" }}</span>
                                         <div class="timeline-title">Joined Organization</div>
-                                        <div class="small text-muted">{{ employee.department }}</div>
+                                        <div class="small text-muted">{{ employee.designation }} • {{ employee.department }}</div>
                                     </div>
                                 </div>
                             </div>

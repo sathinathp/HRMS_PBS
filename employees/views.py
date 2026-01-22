@@ -7,6 +7,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, F
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.urls import reverse_lazy, reverse
 from django.db import transaction
+from django.db.models import Q
 from datetime import timedelta
 
 from django.conf import settings
@@ -634,17 +635,58 @@ def clock_in(request):
 
             attendance.save()
 
-            return JsonResponse(
-                {
-                    "status": "success",
-                    "message": f"Successfully clocked in for session {session_number} ({session_type.lower()})",
-                    "session_number": session_number,
-                    "session_type": session_type,
-                    "clock_in_time": session.clock_in.strftime("%H:%M:%S"),
-                    "total_sessions_today": attendance.daily_sessions_count,
-                    "max_sessions": attendance.max_daily_sessions,
-                }
-            )
+            # Check for late clock-ins in the last 7 days
+            late_warning = None
+            if session_number == 1 and (attendance.is_late or attendance.is_grace_used):
+                from datetime import timedelta
+                
+                seven_days_ago = today - timedelta(days=7)
+                
+                # Count late clock-ins in the last 7 days (excluding today)
+                late_count = Attendance.objects.filter(
+                    employee=employee,
+                    date__gte=seven_days_ago,
+                    date__lt=today,  # Exclude today
+                ).filter(
+                    Q(is_late=True) | Q(is_grace_used=True)
+                ).count()
+                
+                # Include today's late arrival in the count
+                total_late_count = late_count + 1
+                
+                # Prepare warning message
+                if total_late_count >= 5:
+                    late_warning = {
+                        "show_warning": True,
+                        "late_count": total_late_count,
+                        "message": f"You have been late {total_late_count} times in the last 7 days.",
+                        "action": "LOP will be applied. Please ensure timely attendance.",
+                        "severity": "critical"
+                    }
+                else:
+                    late_warning = {
+                        "show_warning": True,
+                        "late_count": total_late_count,
+                        "message": f"You have been late {total_late_count} times in the last 7 days.",
+                        "action": "Please ensure timely attendance to avoid LOP.",
+                        "severity": "warning"
+                    }
+
+            response_data = {
+                "status": "success",
+                "message": f"Successfully clocked in for session {session_number} ({session_type.lower()})",
+                "session_number": session_number,
+                "session_type": session_type,
+                "clock_in_time": session.clock_in.strftime("%H:%M:%S"),
+                "total_sessions_today": attendance.daily_sessions_count,
+                "max_sessions": attendance.max_daily_sessions,
+            }
+            
+            # Add late warning if applicable
+            if late_warning:
+                response_data["late_warning"] = late_warning
+            
+            return JsonResponse(response_data)
 
         except Exception as e:
             import logging
@@ -1105,6 +1147,10 @@ def employee_profile(request):
     # Get emergency contacts for this employee
     emergency_contacts = employee.emergency_contacts.all().order_by("-is_primary", "created_at")
 
+    # Get probation status
+    probation_status = employee.get_probation_status() if employee.date_of_joining else 'IN_PROBATION'
+    probation_date = employee.get_probation_end_date() if employee.date_of_joining else None
+
     return render(
         request,
         "employees/employee_profile.html",
@@ -1114,6 +1160,8 @@ def employee_profile(request):
             "is_admin": request.user.role == User.Role.COMPANY_ADMIN,
             "locations": locations,
             "emergency_contacts": emergency_contacts,
+            "probation_status": probation_status,
+            "probation_date": probation_date,
         },
     )
 
@@ -1757,22 +1805,10 @@ def employee_detail(request, pk):
 
         # Calculate Probation Date (3 months from joining)
         probation_date = None
+        probation_status = None
         if employee.date_of_joining:
-            import calendar
-            p_year = employee.date_of_joining.year
-            p_month = employee.date_of_joining.month + 3
-            p_day = employee.date_of_joining.day
-            
-            # Adjust year if month goes beyond 12
-            while p_month > 12:
-                p_year += 1
-                p_month -= 12
-                
-            # Handle end of month (e.g. Nov 30 -> Feb 28)
-            max_day = calendar.monthrange(p_year, p_month)[1]
-            p_day = min(p_day, max_day)
-            
-            probation_date = employee.date_of_joining.replace(year=p_year, month=p_month, day=p_day)
+            probation_date = employee.get_probation_end_date()
+            probation_status = employee.get_probation_status()
 
         context = {
             "employee": employee,
@@ -1789,6 +1825,7 @@ def employee_detail(request, pk):
             "map_data": json.dumps(map_data),
             "map_date": map_date,
             "probation_date": probation_date,
+            "probation_status": probation_status,
         }
         return render(request, "employees/employee_detail.html", context)
 

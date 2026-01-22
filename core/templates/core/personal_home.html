@@ -1127,7 +1127,8 @@
                             {% if assigned_shift.breaks.all %}
                             {% for break_item in assigned_shift.breaks.all %}
                             <div class="fw-bold text-white" style="font-size: 0.85rem;">
-                                {{ break_item.name }}: {{ break_item.start_time|time:"H:i" }} - {{ break_item.end_time|time:"H:i" }}
+                                {{ break_item.name }}: {{ break_item.start_time|time:"H:i" }} - {{
+                                break_item.end_time|time:"H:i" }}
                             </div>
                             {% endfor %}
                             {% else %}
@@ -1443,6 +1444,43 @@
                                 <button type="button" class="btn btn-warning rounded-pill px-4 fw-bold shadow-sm"
                                     id="btn-confirm-clockout">
                                     Yes, Clock Out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Late Clock-In Warning Modal -->
+                <div class="modal fade" id="lateWarningModal" tabindex="-1" aria-hidden="true"
+                    data-bs-backdrop="static">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                            <div class="modal-header border-0 pt-4 px-4 pb-0" id="late-modal-header">
+                                <h5 class="modal-title fw-bold d-flex align-items-center gap-2" id="late-modal-title">
+                                    <i class="fas fa-clock" id="late-modal-icon"></i> Late Arrival Warning
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                    aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body p-4">
+                                <div class="text-center mb-4">
+                                    <div class="mb-3">
+                                        <div class="display-1 mb-2" id="late-count-icon">⏰</div>
+                                        <h4 class="fw-bold text-dark mb-2" id="late-warning-message">
+                                            You have been late 0 times in the last 7 days.
+                                        </h4>
+                                    </div>
+                                    <div class="alert mb-0" role="alert" id="late-action-alert">
+                                        <strong>Action:</strong>
+                                        <p class="mb-0 mt-2" id="late-action-text">Please ensure timely attendance to
+                                            avoid LOP.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer border-0 justify-content-center pb-4 bg-light">
+                                <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm"
+                                    data-bs-dismiss="modal">
+                                    I Understand
                                 </button>
                             </div>
                         </div>
@@ -1764,16 +1802,22 @@
                 })
                 .then(data => {
                     if (data.status === 'success') {
-                        // Success Animation
-                        if (typeof confetti === 'function') {
-                            confetti({
-                                particleCount: 150,
-                                spread: 70,
-                                origin: { y: 0.6 },
-                                colors: ['#6366f1', '#10b981', '#f59e0b']
-                            });
+                        // Check if there's a late warning to display
+                        if (data.late_warning && data.late_warning.show_warning) {
+                            // Show late warning modal
+                            showLateWarningModal(data.late_warning);
+                        } else {
+                            // Success Animation
+                            if (typeof confetti === 'function') {
+                                confetti({
+                                    particleCount: 150,
+                                    spread: 70,
+                                    origin: { y: 0.6 },
+                                    colors: ['#6366f1', '#10b981', '#f59e0b']
+                                });
+                            }
+                            location.reload();
                         }
-                        location.reload();
                     }
                     else if (data.status === 'confirmation_required' || data.requires_confirmation) {
                         handleConfirmationModal(data, pos, csrfToken, btn, origText);
@@ -1911,6 +1955,54 @@
                         btn.disabled = false;
                     });
             }
+        }
+    }
+
+    // Function to show late warning modal
+    function showLateWarningModal(lateWarning) {
+        const modal = document.getElementById('lateWarningModal');
+        const modalHeader = document.getElementById('late-modal-header');
+        const modalTitle = document.getElementById('late-modal-title');
+        const modalIcon = document.getElementById('late-modal-icon');
+        const messageEl = document.getElementById('late-warning-message');
+        const actionAlert = document.getElementById('late-action-alert');
+        const actionText = document.getElementById('late-action-text');
+        const countIcon = document.getElementById('late-count-icon');
+
+        // Update modal content
+        messageEl.textContent = lateWarning.message;
+        actionText.textContent = lateWarning.action;
+
+        // Style based on severity
+        if (lateWarning.severity === 'critical') {
+            // Critical styling (5+ late arrivals)
+            modalHeader.className = 'modal-header bg-danger bg-opacity-10 border-0 pt-4 px-4 pb-0';
+            modalTitle.className = 'modal-title fw-bold text-danger d-flex align-items-center gap-2';
+            modalIcon.className = 'fas fa-exclamation-triangle';
+            actionAlert.className = 'alert alert-danger mb-0';
+            countIcon.textContent = '🚨';
+        } else {
+            // Warning styling (1-4 late arrivals)
+            modalHeader.className = 'modal-header bg-warning bg-opacity-10 border-0 pt-4 px-4 pb-0';
+            modalTitle.className = 'modal-title fw-bold text-warning d-flex align-items-center gap-2';
+            modalIcon.className = 'fas fa-clock';
+            actionAlert.className = 'alert alert-warning mb-0';
+            countIcon.textContent = '⏰';
+        }
+
+        // Show modal
+        if (typeof bootstrap !== 'undefined') {
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+
+            // Reload page when modal is closed
+            modal.addEventListener('hidden.bs.modal', function () {
+                location.reload();
+            }, { once: true });
+        } else {
+            // Fallback if Bootstrap is not available
+            alert(lateWarning.message + '\n\n' + lateWarning.action);
+            location.reload();
         }
     }
 

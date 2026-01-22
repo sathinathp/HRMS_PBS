@@ -92,19 +92,6 @@
                         <!-- CSS Barcode simulation -->
                         <div class="barcode"></div>
                     </div>
-                    <div class="text-end">
-                        <!-- Simulated Signature -->
-                        <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap"
-                            rel="stylesheet">
-                        <div
-                            style="font-family: 'Dancing Script', cursive; font-size: 1.4rem; color: #1e293b; margin-bottom: 2px; white-space: nowrap;">
-                            {{ company.name }}
-                        </div>
-                        <div class="company-tagline"
-                            style="border-top: 1px solid #e2e8f0; padding-top: 2px; display: inline-block; width: 100%;">
-                            Authorized Signatory
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -151,7 +138,7 @@
 
     .id-card-header {
         position: relative;
-        height: 100px;
+        height: 80px;
         /* Background removed for cleaner look */
         background: transparent;
         display: flex;
@@ -185,7 +172,7 @@
 
     .profile-section {
         text-align: center;
-        margin-top: -40px;
+        margin-top: 20px;
         position: relative;
         z-index: 2;
     }
@@ -230,6 +217,7 @@
         color: var(--text-dark);
         margin: 0 0 4px;
         letter-spacing: -0.025em;
+        text-transform: none !important;
     }
 
     .designation-badge {
@@ -240,6 +228,7 @@
         border-radius: 20px;
         font-size: 0.85rem;
         font-weight: 500;
+        text-transform: none !important;
     }
 
     .details-grid {
@@ -279,6 +268,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        text-transform: none !important;
     }
 
     .detail-value.highlight {
@@ -300,7 +290,7 @@
         background: #f8fafc;
         padding: 16px 32px;
         display: flex;
-        justify-content: space-between;
+        justify-content: center;
         align-items: center;
         border-top: 1px solid var(--border-color);
     }

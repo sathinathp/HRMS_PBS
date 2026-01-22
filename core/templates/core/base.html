@@ -847,10 +847,10 @@
                     class="user-mini-img" alt="User">
                 {% endif %}
                 <div class="user-mini-info">
-                    <div>{{ user.first_name|truncatechars:15 }}</div>
+                    <div>{{ user.get_full_name|truncatechars:20 }}</div>
                     <div>
-                        {% if user.employee_profile %}
-                        {{ user.employee_profile.designation|default:user.role|title|truncatechars:20 }}
+                        {% if user.employee_profile and user.employee_profile.designation %}
+                        {{ user.employee_profile.designation|truncatechars:20 }}
                         {% else %}
                         {{ user.role|title|truncatechars:20 }}
                         {% endif %}
@@ -940,10 +940,10 @@
             {% endif %}
 
             <div class="text-end me-3">
-                <div class="fw-bold text-dark">{{ request.user.first_name|default:request.user.username }}</div>
+                <div class="fw-bold text-dark">{{ request.user.get_full_name|default:request.user.username }}</div>
                 <div class="text-muted small" style="font-size: 0.8rem;">
-                    {% if request.user.employee_profile %}
-                    {{ request.user.employee_profile.designation|default:request.user.role|title }}
+                    {% if request.user.employee_profile and request.user.employee_profile.designation %}
+                    {{ request.user.employee_profile.designation }}
                     {% else %}
                     {{ request.user.role|title }}
                     {% endif %}

@@ -169,6 +169,43 @@ class Employee(models.Model):
         }
         return week_off_map.get(day_of_week, False)
 
+    def get_probation_status(self):
+        """
+        Get probation status for the employee
+        Returns:
+        - 'IN_PROBATION': Employee is still in probation period (< 3 months)
+        - 'COMPLETED': Employee has completed probation period (>= 3 months)
+        - 'COMPLETED_TODAY': Employee completed probation today (exactly 3 months)
+        """
+        if not self.date_of_joining:
+            return 'IN_PROBATION'
+        
+        from dateutil.relativedelta import relativedelta
+        from django.utils import timezone
+        
+        today = timezone.now().date()
+        probation_end_date = self.date_of_joining + relativedelta(months=3)
+        
+        if today < probation_end_date:
+            return 'IN_PROBATION'
+        elif today == probation_end_date:
+            return 'COMPLETED_TODAY'
+        else:
+            return 'COMPLETED'
+    
+    def get_probation_end_date(self):
+        """Get the exact date when probation period ends (3 months from joining)"""
+        if not self.date_of_joining:
+            return None
+        
+        from dateutil.relativedelta import relativedelta
+        return self.date_of_joining + relativedelta(months=3)
+    
+    def is_probation_completed(self):
+        """Check if employee has completed probation period"""
+        status = self.get_probation_status()
+        return status in ['COMPLETED', 'COMPLETED_TODAY']
+
     def save(self, *args, **kwargs):
         """Auto-generate employee ID if not set"""
         if not self.badge_id and self.location:
