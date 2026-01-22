@@ -10,6 +10,10 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Global Responsive CSS -->
+    <link href="{% static 'css/global-responsive.css' %}" rel="stylesheet">
+    <!-- Component Responsive CSS -->
+    <link href="{% static 'css/responsive.css' %}" rel="stylesheet">
     <style>
         :root {
             --sidebar-width: 280px;
@@ -91,7 +95,7 @@
             letter-spacing: 1.5px;
             color: #64748b;
             /* Slate 500 */
-            padding: 24px 28px 12px;
+            padding: 16px 28px 8px;
             font-weight: 700;
         }
 
@@ -105,7 +109,7 @@
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             border-left: 3px solid transparent;
             position: relative;
-            margin: 2px 0;
+            margin: 1px 0;
         }
 
         .sidebar a:hover {
@@ -144,10 +148,11 @@
         /* Dropdown/Collapse Styling */
         .sidebar-dropdown-toggle {
             cursor: pointer;
-            padding: 5px 28px 5px 0;
+            padding: 8px 28px 8px 0;
             /* Align with title padding */
             text-decoration: none !important;
             transition: all 0.2s;
+            margin: 1px 0;
         }
 
         .sidebar-dropdown-toggle:hover .sidebar-section-title {
@@ -164,9 +169,45 @@
             /* Align icon right */
         }
 
+        /* Ensure collapsed sections take no space */
+        .sidebar .collapse:not(.show) {
+            display: none !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden;
+            border: none !important;
+            min-height: 0 !important;
+            max-height: 0 !important;
+        }
+
+        .sidebar .collapse.show {
+            display: block !important;
+        }
+
+        .sidebar .collapse {
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+
+        /* Ensure dropdown toggles for collapsed sections don't add extra space */
+        .sidebar .sidebar-dropdown-toggle + .collapse:not(.show) {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+        }
+
+        /* Remove any Bootstrap default spacing */
+        .sidebar .collapse.collapsing {
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+
         .sub-menu {
             background: rgba(0, 0, 0, 0.2);
-            /* padding: 5px 0; */
+            margin: 0;
+            padding: 0;
         }
 
         .sub-menu a {
@@ -175,6 +216,7 @@
             font-size: 0.90rem;
             border-left: none;
             /* No active border for sub items, or thinner */
+            margin: 1px 0;
         }
 
         .sub-menu a::before {
@@ -279,6 +321,7 @@
             min-height: 100vh;
             background-color: #f8fafc;
             /* Slate 50 */
+            transition: margin-left 0.3s ease;
         }
 
         /* Topbar Redesign */
@@ -294,6 +337,263 @@
             top: 0;
             z-index: 900;
             border-bottom: 1px solid #e2e8f0;
+            transition: margin-left 0.3s ease;
+        }
+
+        /* Mobile Menu Toggle */
+        .mobile-menu-toggle {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--primary-color);
+            cursor: pointer;
+            padding: 12px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            z-index: 1001;
+            position: relative;
+            min-width: 48px;
+            min-height: 48px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mobile-menu-toggle:hover {
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .mobile-menu-toggle:active {
+            background: rgba(99, 102, 241, 0.2);
+            transform: scale(0.95);
+        }
+
+        /* Sidebar Overlay for Mobile */
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .sidebar-overlay.show {
+            display: block;
+            opacity: 1;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            :root {
+                --sidebar-width: 260px;
+            }
+        }
+
+        @media (max-width: 992px) {
+            :root {
+                --sidebar-width: 240px;
+            }
+            
+            .topbar {
+                padding: 15px 20px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                z-index: 1000;
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                width: var(--sidebar-width);
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .content {
+                margin-left: 0;
+                padding: 15px;
+                width: 100%;
+                min-height: 100vh;
+                overflow-x: hidden;
+            }
+            
+            .topbar {
+                margin-left: 0;
+                padding: 12px 15px;
+                width: 100%;
+                position: sticky;
+                top: 0;
+                z-index: 900;
+            }
+            
+            .mobile-menu-toggle {
+                display: flex !important;
+            }
+            
+            /* Aggressive spacing reset for mobile */
+            .sidebar * {
+                margin-top: 0 !important;
+                margin-bottom: 0 !important;
+            }
+            
+            .sidebar > a,
+            .sidebar > .sidebar-dropdown-toggle {
+                margin: 0 !important;
+                padding: 10px 24px !important;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+            
+            .sidebar .sub-menu a {
+                margin: 0 !important;
+                padding: 8px 24px 8px 48px !important;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            }
+            
+            /* Completely hide collapsed sections */
+            .sidebar .collapse:not(.show) {
+                display: none !important;
+                visibility: hidden !important;
+                height: 0 !important;
+                min-height: 0 !important;
+                max-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                overflow: hidden !important;
+                opacity: 0 !important;
+                position: absolute !important;
+                left: -9999px !important;
+            }
+            
+            .sidebar .collapse:not(.show) * {
+                display: none !important;
+                height: 0 !important;
+                min-height: 0 !important;
+                max-height: 0 !important;
+            }
+            
+            /* Force any element with excessive height to be limited */
+            .sidebar * {
+                max-height: 50px !important;
+            }
+            
+            .sidebar .collapse.show {
+                max-height: none !important;
+            }
+            
+            .sidebar .collapse.show * {
+                max-height: none !important;
+            }
+            
+            /* Specific fix for any 250px height elements */
+            .sidebar [style*="height: 250px"],
+            .sidebar [style*="height:250px"] {
+                height: 20px !important;
+                max-height: 20px !important;
+            }
+        }
+            
+            /* Hide desktop-only elements */
+            .d-none.d-md-block {
+                display: none !important;
+            }
+            
+            /* Adjust brand section for mobile */
+            .brand-section {
+                padding: 20px 24px;
+            }
+            
+            .brand-section h3 {
+                font-size: 1.2rem;
+            }
+            
+            /* Adjust sidebar links for mobile */
+            .sidebar a {
+                padding: 12px 24px;
+                font-size: 0.9rem;
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+                margin: 1px 0;
+            }
+            
+            .sidebar-section-title {
+                padding: 16px 24px 8px;
+                font-size: 0.65rem;
+            }
+            
+            /* Employee search adjustments */
+            .employee-search-container input {
+                width: 200px;
+                font-size: 14px;
+            }
+            
+            /* Notification dropdown adjustments */
+            .notification-dropdown {
+                width: calc(100vw - 30px);
+                right: 15px;
+                left: 15px;
+            }
+            
+            /* Topbar user info adjustments */
+            .topbar .text-end {
+                display: none;
+            }
+            
+            .topbar .dropdown img {
+                width: 35px;
+                height: 35px;
+            }
+            
+            /* Prevent body scroll when sidebar is open */
+            body.sidebar-open {
+                overflow: hidden;
+                position: fixed;
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .topbar {
+                padding: 10px 12px;
+            }
+            
+            .topbar h4 {
+                font-size: 1rem;
+                margin: 0;
+            }
+            
+            .content {
+                padding: 10px;
+            }
+            
+            .employee-search-container {
+                display: none;
+            }
+            
+            .notification-dropdown {
+                width: calc(100vw - 20px);
+                right: 10px;
+                left: 10px;
+            }
         }
 
         /* Employee Search Bar Styles */
@@ -460,6 +760,7 @@
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
             z-index: 1050;
             overflow: hidden;
+            border: 1px solid #e5e7eb;
         }
 
         .notification-header {
@@ -475,15 +776,24 @@
             font-weight: 700;
             color: #1e2139;
             font-size: 1rem;
+            margin: 0;
         }
 
         #closeNotificationDropdown {
             transition: all 0.2s ease;
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
         }
 
         #closeNotificationDropdown:hover {
             color: #ef4444 !important;
             transform: scale(1.1);
+            background: rgba(239, 68, 68, 0.1);
         }
 
         .notification-list {
@@ -557,6 +867,184 @@
             margin-bottom: 12px;
             opacity: 0.5;
         }
+
+        /* Mobile Responsive Notifications */
+        @media (max-width: 768px) {
+            .notification-dropdown {
+                position: fixed;
+                top: 60px;
+                left: 10px;
+                right: 10px;
+                width: auto;
+                max-width: none;
+                border-radius: 16px;
+                max-height: calc(100vh - 80px);
+                z-index: 1060;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            }
+            
+            .notification-header {
+                padding: 12px 16px;
+                position: sticky;
+                top: 0;
+                z-index: 10;
+                background: white;
+                border-radius: 16px 16px 0 0;
+            }
+            
+            .notification-header h6 {
+                font-size: 0.9rem;
+            }
+            
+            .notification-list {
+                max-height: calc(100vh - 140px);
+                padding-bottom: 10px;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            .notification-item {
+                padding: 12px 16px;
+                border-bottom: 1px solid #f1f3f5;
+                min-height: 44px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+            }
+            
+            .notification-item:active {
+                background: rgba(99, 102, 241, 0.1);
+            }
+            
+            .notification-item-content {
+                font-size: 0.85rem;
+                line-height: 1.4;
+            }
+            
+            .notification-item-time {
+                font-size: 0.7rem;
+            }
+            
+            .notification-empty {
+                padding: 30px 16px;
+            }
+            
+            .notification-empty i {
+                font-size: 2.5rem;
+            }
+            
+            /* Sound button adjustments */
+            #testSoundBtn {
+                padding: 6px;
+                font-size: 0.8rem;
+                min-height: 32px;
+                min-width: 32px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            #markAllRead {
+                font-size: 0.7rem;
+                padding: 4px 8px;
+                min-height: 32px;
+                display: flex;
+                align-items: center;
+            }
+            
+            #closeNotificationDropdown {
+                min-height: 32px;
+                min-width: 32px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .notification-dropdown {
+                top: 50px;
+                left: 5px;
+                right: 5px;
+                border-radius: 12px;
+                max-height: calc(100vh - 60px);
+            }
+            
+            .notification-header {
+                padding: 10px 12px;
+                border-radius: 12px 12px 0 0;
+            }
+            
+            .notification-header h6 {
+                font-size: 0.85rem;
+            }
+            
+            .notification-list {
+                max-height: calc(100vh - 120px);
+            }
+            
+            .notification-item {
+                padding: 10px 12px;
+            }
+            
+            .notification-item-content {
+                font-size: 0.8rem;
+            }
+            
+            .notification-item-time {
+                font-size: 0.65rem;
+            }
+            
+            .notification-empty {
+                padding: 20px 12px;
+            }
+            
+            #closeNotificationDropdown {
+                font-size: 1rem;
+            }
+            
+            #testSoundBtn {
+                display: none; /* Hide sound button on very small screens */
+            }
+            
+            #markAllRead {
+                font-size: 0.65rem;
+                padding: 3px 6px;
+            }
+        }
+
+        /* Notification dropdown animation */
+        .notification-dropdown {
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .notification-dropdown.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Mobile notification backdrop */
+        .notification-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 1055;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: auto;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        
+        .notification-backdrop.show {
+            opacity: 1;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -597,7 +1085,7 @@
 
         {% if user.role == 'SUPERADMIN' %}
         <!-- Super Admin Menu -->
-        <div class="sidebar-section-title ps-0 mt-0 mb-0 py-2">Global Admin</div>
+        <div class="sidebar-section-title ps-0 mt-0 mb-0 py-1">Global Admin</div>
         <a href="{% url 'superadmin:dashboard' %}" class="{% if 'superadmin' in request.path %}active{% endif %}">
             <i class="fas fa-globe"></i> <span>Global View</span>
         </a>
@@ -638,7 +1126,7 @@
         {% if user.role == 'COMPANY_ADMIN' or user.role == 'MANAGER' %}
         <a href="#menuEmployees" class="sidebar-dropdown-toggle d-flex justify-content-between align-items-center"
             data-bs-toggle="collapse" role="button" aria-expanded="false">
-            <span class="sidebar-section-title ps-0 mt-0 mb-0 py-2">
+            <span class="sidebar-section-title ps-0 mt-0 mb-0 py-1">
                 {% if user.role == 'MANAGER' %}
                 Team
                 {% else %}
@@ -685,7 +1173,7 @@
         {% if user.role == 'COMPANY_ADMIN' or user.role == 'MANAGER' %}
         <a href="#menuLeaves" class="sidebar-dropdown-toggle d-flex justify-content-between align-items-center"
             data-bs-toggle="collapse" role="button" aria-expanded="false">
-            <span class="sidebar-section-title ps-0 mt-0 mb-0 py-2">Leaves</span>
+            <span class="sidebar-section-title ps-0 mt-0 mb-0 py-1">Leaves</span>
             <i class="fas fa-chevron-down small text-muted"></i>
         </a>
         <div class="collapse {% if 'leaves/requests' in request.path or 'leaves/history' in request.path or 'exit-initiatives' in request.path %}show{% endif %}"
@@ -719,7 +1207,7 @@
         <!-- Payroll (Collapsible) -->
         <a href="#menuPayroll" class="sidebar-dropdown-toggle d-flex justify-content-between align-items-center"
             data-bs-toggle="collapse" role="button" aria-expanded="false">
-            <span class="sidebar-section-title ps-0 mt-0 mb-0 py-2">Payroll</span>
+            <span class="sidebar-section-title ps-0 mt-0 mb-0 py-1">Payroll</span>
             <i class="fas fa-chevron-down small text-muted"></i>
         </a>
         <div class="collapse {% if 'payroll' in request.path %}show{% endif %}" id="menuPayroll">
@@ -733,7 +1221,7 @@
         <!-- Configuration (Collapsible) -->
         <a href="#menuConfig" class="sidebar-dropdown-toggle d-flex justify-content-between align-items-center"
             data-bs-toggle="collapse" role="button" aria-expanded="false">
-            <span class="sidebar-section-title ps-0 mt-0 mb-0 py-2">Configuration</span>
+            <span class="sidebar-section-title ps-0 mt-0 mb-0 py-1">Configuration</span>
             <i class="fas fa-chevron-down small text-muted"></i>
         </a>
         <div class="collapse {% if 'config' in request.path %}show{% endif %}" id="menuConfig">
@@ -776,7 +1264,7 @@
         {% if user.role == 'COMPANY_ADMIN' or user.role == 'MANAGER' or user.role == 'SUPERADMIN' %}
         <a href="#menuAI" class="sidebar-dropdown-toggle d-flex justify-content-between align-items-center"
             data-bs-toggle="collapse" role="button" aria-expanded="false">
-            <span class="sidebar-section-title ps-0 mt-0 mb-0 py-2">🤖 AI Features</span>
+            <span class="sidebar-section-title ps-0 mt-0 mb-0 py-1">🤖 AI Features</span>
             <i class="fas fa-chevron-down small text-muted"></i>
         </a>
         <div class="collapse {% if 'ai/' in request.path %}show{% endif %}" id="menuAI">
@@ -873,6 +1361,11 @@
     <!-- Topbar -->
     <div class="topbar">
         <div class="d-flex align-items-center gap-3">
+            <!-- Mobile Menu Toggle -->
+            <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle navigation">
+                <i class="fas fa-bars"></i>
+            </button>
+            
             <h4 class="m-0 fw-bold" style="color: #4a5568">
                 {% if request.user.company %}
                 {% if request.user.company.slug == 'petabytz' %}
@@ -981,6 +1474,9 @@
         {% endif %}
     </div>
 
+    <!-- Sidebar Overlay for Mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
     <!-- Main Content -->
     <div class="content">
         {% if messages %}
@@ -997,9 +1493,74 @@
 
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Responsive JavaScript -->
+    <script src="{% static 'js/responsive.js' %}"></script>
 
     {% if user.is_authenticated %}
     <script>
+        // Mobile Navigation is handled by responsive.js
+        // Fallback mobile navigation in case responsive.js fails to load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Wait a bit to see if responsive.js loaded
+            setTimeout(function() {
+                const mobileToggle = document.getElementById('mobileMenuToggle');
+                const sidebar = document.querySelector('.sidebar');
+                const overlay = document.getElementById('sidebarOverlay');
+                
+                if (mobileToggle && sidebar && overlay) {
+                    // Check if responsive.js already handled this
+                    if (!mobileToggle.hasAttribute('data-responsive-handled')) {
+                        console.log('Responsive.js not detected, using fallback mobile navigation');
+                        
+                        // Simple fallback mobile navigation
+                        mobileToggle.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            
+                            console.log('Fallback: Mobile toggle clicked');
+                            
+                            const isOpen = sidebar.classList.contains('show');
+                            
+                            if (isOpen) {
+                                sidebar.classList.remove('show');
+                                overlay.classList.remove('show');
+                                document.body.classList.remove('sidebar-open');
+                                this.querySelector('i').className = 'fas fa-bars';
+                                this.setAttribute('aria-expanded', 'false');
+                            } else {
+                                sidebar.classList.add('show');
+                                overlay.classList.add('show');
+                                document.body.classList.add('sidebar-open');
+                                this.querySelector('i').className = 'fas fa-times';
+                                this.setAttribute('aria-expanded', 'true');
+                            }
+                        });
+                        
+                        overlay.addEventListener('click', function() {
+                            sidebar.classList.remove('show');
+                            overlay.classList.remove('show');
+                            document.body.classList.remove('sidebar-open');
+                            mobileToggle.querySelector('i').className = 'fas fa-bars';
+                            mobileToggle.setAttribute('aria-expanded', 'false');
+                        });
+                        
+                        // Prevent dropdown toggles from closing sidebar
+                        const dropdownToggles = sidebar.querySelectorAll('[data-bs-toggle="collapse"]');
+                        dropdownToggles.forEach(toggle => {
+                            toggle.addEventListener('click', function(e) {
+                                e.stopPropagation();
+                                console.log('Dropdown toggle clicked, preventing sidebar close');
+                            });
+                        });
+                        
+                        mobileToggle.setAttribute('data-responsive-handled', 'fallback');
+                    }
+                }
+            }, 500);
+        });
+        
+        // Location tracking code continues below...
+
         (function () {
             /**
              * Precise Hourly Location Tracking (Keka-style)
@@ -1341,17 +1902,73 @@
 
             if (isDropdownOpen) {
                 notificationDropdown.style.display = 'block';
+                notificationDropdown.classList.add('show');
+                
+                // Add backdrop for mobile
+                if (window.innerWidth <= 768) {
+                    createNotificationBackdrop();
+                }
+                
                 loadNotifications();
             } else {
-                notificationDropdown.style.display = 'none';
+                closeNotificationDropdown();
             }
         });
+
+        function createNotificationBackdrop() {
+            // Remove existing backdrop
+            const existingBackdrop = document.getElementById('notificationBackdrop');
+            if (existingBackdrop) {
+                existingBackdrop.remove();
+            }
+            
+            // Create new backdrop
+            const backdrop = document.createElement('div');
+            backdrop.id = 'notificationBackdrop';
+            backdrop.className = 'notification-backdrop';
+            backdrop.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.3);
+                z-index: 1055;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                pointer-events: auto;
+            `;
+            
+            document.body.appendChild(backdrop);
+            
+            // Trigger animation
+            setTimeout(() => {
+                backdrop.style.opacity = '1';
+            }, 10);
+            
+            // Close on backdrop click
+            backdrop.addEventListener('click', closeNotificationDropdown);
+        }
+
+        function closeNotificationDropdown() {
+            notificationDropdown.style.display = 'none';
+            notificationDropdown.classList.remove('show');
+            isDropdownOpen = false;
+            
+            // Remove backdrop
+            const backdrop = document.getElementById('notificationBackdrop');
+            if (backdrop) {
+                backdrop.style.opacity = '0';
+                setTimeout(() => {
+                    backdrop.remove();
+                }, 300);
+            }
+        }
 
         // Close dropdown when clicking outside
         document.addEventListener('click', function (e) {
             if (!document.getElementById('notificationContainer').contains(e.target)) {
-                notificationDropdown.style.display = 'none';
-                isDropdownOpen = false;
+                closeNotificationDropdown();
             }
         });
 
@@ -1364,8 +1981,7 @@
         const closeNotificationBtn = document.getElementById('closeNotificationDropdown');
         closeNotificationBtn.addEventListener('click', function (e) {
             e.stopPropagation();
-            notificationDropdown.style.display = 'none';
-            isDropdownOpen = false;
+            closeNotificationDropdown();
         });
 
         // Load notifications
@@ -1590,7 +2206,7 @@
         }
 
         // Track previous notification count to detect new notifications
-        let previousNotificationCount = {{ unread_notification_count|default:0 }};
+        let previousNotificationCount = parseInt('{{ unread_notification_count|default:0 }}') || 0;
 
         // Poll for new notifications every 15 seconds (increased frequency)
         setInterval(function () {

@@ -239,12 +239,19 @@
         width: 120px;
         height: 120px;
         margin: 0 auto 15px;
+        max-width: 100%;
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .stat-ring svg {
         width: 100%;
         height: 100%;
         transform: rotate(-90deg);
+        max-width: 120px;
+        max-height: 120px;
     }
 
     .stat-ring circle {
@@ -271,18 +278,24 @@
         left: 50%;
         transform: translate(-50%, -50%);
         text-align: center;
+        width: 80%;
+        max-width: 80px;
     }
 
     .stat-ring-value {
         font-weight: 700;
         font-size: 1.2rem;
         color: var(--text-main);
+        line-height: 1.2;
+        word-break: break-word;
     }
 
     .stat-ring-label {
         font-size: 0.7rem;
         color: var(--text-muted);
         text-transform: uppercase;
+        line-height: 1.1;
+        margin-top: 2px;
     }
 
     /* --- TIMELINE / SHIFT --- */
@@ -421,6 +434,7 @@
         width: 100%;
         border-collapse: separate;
         border-spacing: 0;
+        min-width: 600px; /* Ensure minimum width for horizontal scroll */
     }
 
     .table-custom th {
@@ -433,6 +447,7 @@
         border-top: 1px solid #e2e8f0;
         border-bottom: 1px solid #e2e8f0;
         letter-spacing: 0.05em;
+        white-space: nowrap;
     }
 
     .table-custom th:first-child {
@@ -452,6 +467,7 @@
         vertical-align: middle;
         background: white;
         transition: background 0.2s;
+        white-space: nowrap;
     }
 
     .table-custom tr:last-child td {
@@ -566,41 +582,624 @@
         animation-delay: 0.3s;
     }
 
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-        background: #f1f5f9;
-    }
-
-    ::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 4px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-    }
-
-    /* Active Day Pulse */
-    .day-badge.active {
-        animation: pulse-soft 2s infinite;
-    }
-
-    @keyframes pulse-soft {
-        0% {
-            box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+    /* --- RESPONSIVE DESIGN --- */
+    @media (max-width: 1200px) {
+        .digital-clock {
+            font-size: 3rem;
         }
-
-        70% {
-            box-shadow: 0 0 0 6px rgba(99, 102, 241, 0);
+        
+        .card-body-clean {
+            padding: 20px;
         }
+    }
 
-        100% {
-            box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    @media (max-width: 992px) {
+        .digital-clock {
+            font-size: 2.8rem;
+        }
+        
+        .shift-card {
+            margin-bottom: 20px;
+        }
+        
+        .pro-icon-box {
+            width: 56px;
+            height: 56px;
+        }
+        
+        .pro-icon-box i {
+            font-size: 1.3rem;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .container-fluid {
+            padding: 15px 10px;
+        }
+        
+        /* Stack columns vertically on mobile */
+        .col-lg-3, .col-lg-6 {
+            margin-bottom: 20px;
+        }
+        
+        /* Adjust clock widget for mobile */
+        .digital-clock {
+            font-size: 2.5rem;
+            letter-spacing: -1px;
+        }
+        
+        .current-date {
+            font-size: 0.85rem;
+            padding: 5px 12px;
+        }
+        
+        /* Mobile-friendly buttons */
+        .btn-clock {
+            padding: 18px 20px;
+            font-size: 0.95rem;
+            margin-bottom: 10px;
+        }
+        
+        .btn-icon-wrapper {
+            width: 28px;
+            height: 28px;
+            font-size: 1rem;
+        }
+        
+        /* Adjust shift card for mobile */
+        .shift-header {
+            padding: 20px 20px 10px;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 15px;
+        }
+        
+        .shift-icon-box {
+            width: 48px;
+            height: 48px;
+            margin-right: 15px;
+        }
+        
+        .shift-icon-box i {
+            font-size: 1.2rem;
+        }
+        
+        .shift-badge {
+            padding: 8px 20px;
+            font-size: 0.75rem;
+        }
+        
+        .pro-icon-box {
+            width: 48px;
+            height: 48px;
+        }
+        
+        .pro-icon-box i {
+            font-size: 1.1rem;
+        }
+        
+        /* Adjust timeline for mobile */
+        .timeline-container {
+            padding: 60px 30px 50px;
+        }
+        
+        .timeline-track {
+            left: 30px;
+            right: 30px;
+        }
+        
+        .timeline-nodes {
+            left: 30px;
+            right: 30px;
+        }
+        
+        /* Mobile table improvements */
+        .table-custom {
+            font-size: 0.85rem;
+            min-width: 700px; /* Force horizontal scroll on mobile */
+        }
+        
+        .table-custom th,
+        .table-custom td {
+            padding: 12px 15px;
+        }
+        
+        /* Mobile-specific table layout */
+        .table-responsive {
+            -webkit-overflow-scrolling: touch;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            position: relative;
+            margin-bottom: 20px;
+        }
+        
+        /* Add swipe indicator for mobile tables */
+        .table-responsive::after {
+            content: "← Swipe to see more →";
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(99, 102, 241, 0.1);
+            color: #6366f1;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0.8;
+            animation: fadeInOut 3s ease-in-out infinite;
+        }
+        
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 0.4; }
+        }
+        
+        /* Hide swipe indicator after user scrolls */
+        .table-responsive.scrolled::after {
+            display: none;
+        }
+        
+        /* Responsive table columns for mobile - hide less important columns */
+        .table-custom th:nth-child(4), /* Hours column */
+        .table-custom td:nth-child(4) {
+            display: none;
+        }
+        
+        /* Keep Map column visible but make it more compact */
+        .table-custom th:nth-child(6), /* Map column */
+        .table-custom td:nth-child(6) {
+            min-width: 50px;
+            padding: 8px 4px;
+            text-align: center;
+        }
+        
+        .table-custom td:nth-child(6) .btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            font-size: 0.8rem;
+        }
+        
+        /* Make status badges smaller on mobile */
+        .status-badge {
+            padding: 4px 8px;
+            font-size: 0.7rem;
+        }
+        
+        /* Compact date display */
+        .table-custom td:first-child {
+            min-width: 70px;
+        }
+        
+        .table-custom td:first-child .fw-bold {
+            font-size: 0.9rem;
+        }
+        
+        .table-custom td:first-child .small {
+            font-size: 0.7rem;
+        }
+        
+        /* Time columns more compact */
+        .table-custom td:nth-child(2),
+        .table-custom td:nth-child(3) {
+            min-width: 80px;
+            font-size: 0.8rem;
+        }
+        
+        /* Attendance log card header mobile optimization */
+        .keka-card .card-header-clean {
+            padding: 15px 20px 10px;
+        }
+        
+        .keka-card .card-title-text {
+            font-size: 0.95rem;
+        }
+        
+        .keka-card .btn-sm {
+            font-size: 0.75rem;
+            padding: 6px 12px;
+        }
+        
+        /* Adjust stats ring for mobile */
+        .stat-ring {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 12px;
+        }
+        
+        .stat-ring svg {
+            max-width: 100px;
+            max-height: 100px;
+        }
+        
+        .stat-ring circle {
+            stroke-width: 6;
+        }
+        
+        .stat-ring-content {
+            width: 75%;
+            max-width: 70px;
+        }
+        
+        .stat-ring-value {
+            font-size: 1rem;
+            line-height: 1.1;
+        }
+        
+        .stat-ring-label {
+            font-size: 0.65rem;
+            margin-top: 1px;
+        }
+        
+        /* Week days adjustment */
+        .week-days {
+            gap: 3px;
+            padding: 8px;
+        }
+        
+        .day-badge {
+            width: 28px;
+            height: 28px;
+            font-size: 0.75rem;
+        }
+        
+        /* Celebration items */
+        .celebration-item {
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .celebration-avatar {
+            width: 36px;
+            height: 36px;
+            font-size: 0.9rem;
+        }
+        
+        /* Modal adjustments */
+        .modal-dialog {
+            margin: 15px;
+        }
+        
+        .modal-content {
+            border-radius: 16px;
+        }
+    }
+
+    @media (max-width: 576px) {
+        .container-fluid {
+            padding: 10px 8px;
+        }
+        
+        /* Header adjustments */
+        .d-flex.justify-content-between.align-items-end {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        
+        .d-flex.justify-content-between.align-items-end h4 {
+            font-size: 1.3rem;
+        }
+        
+        /* Further reduce clock size */
+        .digital-clock {
+            font-size: 2rem;
+        }
+        
+        .current-date {
+            font-size: 0.8rem;
+        }
+        
+        /* Compact buttons */
+        .btn-clock {
+            padding: 15px 18px;
+            font-size: 0.9rem;
+        }
+        
+        /* Shift card adjustments */
+        .shift-header {
+            padding: 15px 15px 8px;
+        }
+        
+        .shift-header h3 {
+            font-size: 1.1rem;
+        }
+        
+        .shift-header .opacity-75 {
+            font-size: 1rem;
+        }
+        
+        .timeline-container {
+            padding: 50px 20px 40px;
+        }
+        
+        .timeline-track {
+            left: 20px;
+            right: 20px;
+        }
+        
+        .timeline-nodes {
+            left: 20px;
+            right: 20px;
+        }
+        
+        .shift-footer {
+            padding: 15px 20px;
+            flex-direction: column;
+            gap: 15px;
+            text-align: center;
+        }
+        
+        /* Very compact stats ring for small screens */
+        .stat-ring {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 10px;
+        }
+        
+        .stat-ring svg {
+            max-width: 80px;
+            max-height: 80px;
+        }
+        
+        .stat-ring circle {
+            stroke-width: 5;
+        }
+        
+        .stat-ring-content {
+            width: 70%;
+            max-width: 56px;
+        }
+        
+        .stat-ring-value {
+            font-size: 0.9rem;
+            line-height: 1;
+        }
+        
+        .stat-ring-label {
+            font-size: 0.6rem;
+            margin-top: 1px;
+        }
+        
+        /* Very compact table */
+        .table-custom {
+            font-size: 0.8rem;
+            min-width: 600px; /* Reduce minimum width for very small screens */
+        }
+        
+        .table-custom th,
+        .table-custom td {
+            padding: 10px 8px;
+        }
+        
+        /* Hide more columns on very small screens but keep Map visible */
+        .table-custom th:nth-child(4),
+        .table-custom td:nth-child(4) {
+            display: none;
+        }
+        
+        /* Make Map column even more compact on very small screens */
+        .table-custom th:nth-child(6), /* Map column */
+        .table-custom td:nth-child(6) {
+            min-width: 40px;
+            padding: 6px 2px;
+            text-align: center;
+        }
+        
+        .table-custom td:nth-child(6) .btn {
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            font-size: 0.7rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+        
+        /* Ensure map buttons are touch-friendly */
+        .table-custom td:nth-child(6) a {
+            min-width: 32px;
+            min-height: 32px;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        
+        /* Make the table more compact */
+        .table-custom th {
+            font-size: 0.7rem;
+            padding: 8px 6px;
+        }
+        
+        .table-custom td {
+            padding: 8px 6px;
+            font-size: 0.75rem;
+        }
+        
+        /* Ultra-compact date display */
+        .table-custom td:first-child {
+            min-width: 50px;
+        }
+        
+        .table-custom td:first-child .fw-bold {
+            font-size: 0.8rem;
+            line-height: 1.2;
+        }
+        
+        .table-custom td:first-child .small {
+            font-size: 0.65rem;
+        }
+        
+        /* Ultra-compact time columns */
+        .table-custom td:nth-child(2),
+        .table-custom td:nth-child(3) {
+            min-width: 60px;
+            font-size: 0.7rem;
+        }
+        
+        /* Ultra-compact status badges */
+        .status-badge {
+            padding: 2px 6px;
+            font-size: 0.65rem;
+            border-radius: 8px;
+        }
+        
+        /* Card header adjustments for mobile */
+        .card-header-clean {
+            padding: 15px 15px 10px;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        
+        .card-title-text {
+            font-size: 0.95rem;
+        }
+        
+        .btn-sm {
+            font-size: 0.7rem;
+            padding: 4px 8px;
+        }
+        
+        /* Improve table scrolling experience */
+        .table-responsive {
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        /* Adjust swipe indicator for very small screens */
+        .table-responsive::after {
+            font-size: 0.65rem;
+            padding: 3px 8px;
+            bottom: 8px;
+        }
+        
+        /* Compact week days */
+        .day-badge {
+            width: 24px;
+            height: 24px;
+            font-size: 0.7rem;
+        }
+        
+        /* Compact celebration items */
+        .celebration-avatar {
+            width: 32px;
+            height: 32px;
+            font-size: 0.8rem;
+            margin-right: 10px;
+        }
+        
+        .celebration-item-content {
+            font-size: 0.85rem;
+        }
+        
+        /* Modal full width on very small screens */
+        .modal-dialog {
+            margin: 10px;
+            width: calc(100% - 20px);
+        }
+    }
+
+    /* Extra small screens (phones in portrait) */
+    @media (max-width: 400px) {
+        .stat-ring {
+            width: 70px;
+            height: 70px;
+            margin: 0 auto 8px;
+        }
+        
+        .stat-ring svg {
+            max-width: 70px;
+            max-height: 70px;
+        }
+        
+        .stat-ring circle {
+            stroke-width: 4;
+        }
+        
+        .stat-ring-content {
+            width: 65%;
+            max-width: 45px;
+        }
+        
+        .stat-ring-value {
+            font-size: 0.8rem;
+            line-height: 0.9;
+        }
+        
+        .stat-ring-label {
+            font-size: 0.55rem;
+            margin-top: 0;
+        }
+        
+        /* Adjust the weekly stats card layout for very small screens */
+        .row.text-center.align-items-center .col-6 {
+            padding: 0.5rem;
+        }
+        
+        .row.text-center.align-items-center .col-6.border-end {
+            border-right: 1px solid #e2e8f0 !important;
+        }
+    }
+
+    /* Landscape phone adjustments */
+    @media (max-width: 896px) and (orientation: landscape) {
+        .digital-clock {
+            font-size: 2.2rem;
+        }
+        
+        .shift-card {
+            margin-bottom: 15px;
+        }
+        
+        .timeline-container {
+            padding: 40px 25px 35px;
+        }
+        
+        /* Adjust stat ring for landscape */
+        .stat-ring {
+            width: 90px;
+            height: 90px;
+        }
+        
+        .stat-ring svg {
+            max-width: 90px;
+            max-height: 90px;
+        }
+        
+        .stat-ring-content {
+            max-width: 65px;
+        }
+        
+        .stat-ring-value {
+            font-size: 0.95rem;
+        }
+        
+        .stat-ring-label {
+            font-size: 0.6rem;
+        }
+    }
+
+    /* Touch device improvements */
+    @media (hover: none) and (pointer: coarse) {
+        .btn-clock {
+            min-height: 48px;
+        }
+        
+        .keka-card:hover {
+            transform: none;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .celebration-item:hover {
+            transform: none;
+        }
+        
+        .table-responsive {
+            -webkit-overflow-scrolling: touch;
         }
     }
 </style>
@@ -629,7 +1228,7 @@
     <div class="row g-4">
 
         <!-- Left Column: Primary Actions & Stats -->
-        <div class="col-lg-3">
+        <div class="col-12 col-lg-3 order-1 order-lg-1">
             <div class="vstack gap-4">
 
                 <!-- Clock In/Out Card -->
@@ -761,7 +1360,7 @@
         </div>
 
         <!-- Middle Column: Shift & Activity -->
-        <div class="col-lg-6">
+        <div class="col-12 col-lg-6 order-3 order-lg-2">
             <div class="vstack gap-4">
 
                 <style>
@@ -1225,7 +1824,10 @@
                                         <th>Check Out</th>
                                         <th>Hours</th>
                                         <th>Status</th>
-                                        <th>Map</th>
+                                        <th class="text-center">
+                                            <span class="d-none d-md-inline">Map</span>
+                                            <span class="d-md-none"><i class="fas fa-map-marker-alt"></i></span>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1295,7 +1897,7 @@
         </div>
 
         <!-- Right Column: Info & Widgets -->
-        <div class="col-lg-3">
+        <div class="col-12 col-lg-3 order-2 order-lg-3">
             <div class="vstack gap-4">
 
                 <!-- Working Days (Calendar visual) -->
@@ -2178,6 +2780,47 @@
     window.addEventListener('beforeunload', function () {
         if (locationTrackingInterval) {
             clearInterval(locationTrackingInterval);
+        }
+    });
+
+    // Enhanced Mobile Table Experience
+    document.addEventListener('DOMContentLoaded', function() {
+        const tableResponsive = document.querySelector('.table-responsive');
+        
+        if (tableResponsive && window.innerWidth <= 768) {
+            let scrollTimeout;
+            
+            // Hide swipe indicator after user scrolls
+            tableResponsive.addEventListener('scroll', function() {
+                this.classList.add('scrolled');
+                
+                // Clear existing timeout
+                clearTimeout(scrollTimeout);
+                
+                // Show indicator again after 3 seconds of no scrolling
+                scrollTimeout = setTimeout(() => {
+                    this.classList.remove('scrolled');
+                }, 3000);
+            });
+            
+            // Add touch feedback for better mobile experience
+            const tableRows = tableResponsive.querySelectorAll('tr');
+            tableRows.forEach(row => {
+                row.addEventListener('touchstart', function() {
+                    this.style.backgroundColor = 'rgba(99, 102, 241, 0.05)';
+                }, { passive: true });
+                
+                row.addEventListener('touchend', function() {
+                    setTimeout(() => {
+                        this.style.backgroundColor = '';
+                    }, 150);
+                }, { passive: true });
+            });
+            
+            // Auto-hide swipe indicator after 5 seconds
+            setTimeout(() => {
+                tableResponsive.classList.add('scrolled');
+            }, 5000);
         }
     });
 
