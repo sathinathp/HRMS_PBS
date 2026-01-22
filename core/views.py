@@ -220,9 +220,9 @@ def admin_dashboard(request):
         today_attendance = today_attendance.filter(employee__location_id=location_id)
 
     # Calculate stats
-    late_arrivals = 0
-    early_departures = 0
-    on_duty_count = 0
+    late_arrivals_list = []
+    early_departures_list = []
+    on_duty_list = []
     on_time = 0
     work_from_office = 0
     remote_clockins = 0
@@ -235,7 +235,7 @@ def admin_dashboard(request):
             clock_in_time = timezone.localtime(att.clock_in).time()
             # Late arrivals
             if att.is_late:
-                late_arrivals += 1
+                late_arrivals_list.append(att)
             else:
                 on_time += 1
 
@@ -248,12 +248,16 @@ def admin_dashboard(request):
                 remote_clockins += 1
 
         # On Duty (Interpreted as Currently Clocked In / Active based on user request)
-        if att.clock_in and not att.clock_out or att.status == "ON_DUTY":
-            on_duty_count += 1
+        if (att.clock_in and not att.clock_out) or att.status == "ON_DUTY":
+            on_duty_list.append(att)
 
         # Early Departures
         if att.is_early_departure:
-            early_departures += 1
+            early_departures_list.append(att)
+
+    late_arrivals = len(late_arrivals_list)
+    early_departures = len(early_departures_list)
+    on_duty_count = len(on_duty_list)
 
     # --- Department Performance Logic ---
     # Get distinct departments with improved deduplication
@@ -539,6 +543,9 @@ def admin_dashboard(request):
         "late_arrivals": late_arrivals,
         "early_departures": early_departures,
         "on_duty_count": on_duty_count,
+        "late_arrivals_list": late_arrivals_list,
+        "early_departures_list": early_departures_list,
+        "on_duty_list": on_duty_list,
         "department_performance": department_performance,
         "on_time": on_time,
         "work_from_office": work_from_office,
