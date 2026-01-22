@@ -949,13 +949,34 @@
                     {% endif %}
                 </div>
             </div>
-            {% if request.user.employee_profile and request.user.employee_profile.profile_picture %}
-            <img src="{{ request.user.employee_profile.profile_picture.url }}"
-                class="rounded-circle shadow-sm object-fit-cover" width="40" height="40" alt="User">
-            {% else %}
-            <img src="https://ui-avatars.com/api/?name={{ request.user.first_name|default:request.user.email }}&background=667eea&color=fff"
-                class="rounded-circle shadow-sm" width="40" height="40" alt="User">
-            {% endif %}
+            <div class="dropdown">
+                <a href="#" class="d-flex align-items-center link-dark text-decoration-none dropdown-toggle"
+                    id="dropdownUser1" data-bs-toggle="dropdown" aria-expanded="false">
+                    {% if request.user.employee_profile and request.user.employee_profile.profile_picture %}
+                    <img src="{{ request.user.employee_profile.profile_picture.url }}"
+                        class="rounded-circle shadow-sm object-fit-cover" width="40" height="40" alt="User">
+                    {% else %}
+                    <img src="https://ui-avatars.com/api/?name={{ request.user.first_name|default:request.user.email }}&background=667eea&color=fff"
+                        class="rounded-circle shadow-sm" width="40" height="40" alt="User">
+                    {% endif %}
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end text-small shadow" aria-labelledby="dropdownUser1">
+                    <li><a class="dropdown-item" href="{% url 'employee_profile' %}"><i class="fas fa-user me-2"></i>My
+                            Profile</a></li>
+                    <li><a class="dropdown-item" href="{% url 'id_card' %}"><i class="fas fa-id-badge me-2"></i>ID
+                            Card</a></li>
+                    <li>
+                        <hr class="dropdown-divider">
+                    </li>
+                    <li>
+                        <form action="{% url 'logout' %}" method="post" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="dropdown-item text-danger"><i
+                                    class="fas fa-sign-out-alt me-2"></i>Sign out</button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
         </div>
         {% endif %}
     </div>

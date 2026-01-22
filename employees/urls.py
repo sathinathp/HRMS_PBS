@@ -133,4 +133,5 @@ urlpatterns = [
         views.delete_emergency_contact,
         name="delete_emergency_contact",
     ),
+    path("id-card/", views.employee_id_card, name="id_card"),
 ]
