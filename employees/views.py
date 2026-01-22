@@ -4001,3 +4001,29 @@ def get_employee_location_history(request, employee_id):
         logger = logging.getLogger(__name__)
         logger.error(f"Location history error: {str(e)}", exc_info=True)
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+@login_required
+def employee_id_card(request):
+    """
+    View to display the employee's ID card.
+    """
+    try:
+        from django.shortcuts import redirect
+        if hasattr(request.user, "employee_profile"):
+             employee = request.user.employee_profile
+        else:
+             from django.contrib import messages
+             messages.error(request, "Employee profile not found.")
+             return redirect("dashboard")
+             
+    except Exception:
+        from django.contrib import messages
+        from django.shortcuts import redirect
+        messages.error(request, "Employee profile not found.")
+        return redirect("dashboard")
+
+    context = {
+        "employee": employee,
+        "company": employee.company,
+    }
+    return render(request, "employees/id_card.html", context)
