@@ -553,10 +553,7 @@
                 left: 15px;
             }
             
-            /* Topbar user info adjustments */
-            .topbar .text-end {
-                display: none;
-            }
+            /* Topbar user info adjustments - only hide on very small screens */
             
             .topbar .dropdown img {
                 width: 35px;
@@ -578,6 +575,12 @@
             
             .topbar h4 {
                 font-size: 1rem;
+            }
+            
+            /* Hide user info text on very small screens only */
+            .topbar .text-end {
+                display: none;
+            }
                 margin: 0;
             }
             
@@ -763,6 +766,66 @@
             border: 1px solid #e5e7eb;
         }
 
+        /* Desktop/Laptop specific notification styles */
+        @media (min-width: 769px) {
+            .notification-dropdown {
+                position: absolute;
+                top: calc(100% + 10px);
+                right: 0;
+                width: 400px;
+                max-height: 600px;
+                z-index: 1060;
+                transform-origin: top right;
+                box-shadow: 0 15px 50px rgba(0, 0, 0, 0.2);
+                border: 1px solid #e5e7eb;
+                /* Ensure dropdown is not cut off by parent containers */
+                position: fixed;
+            }
+            
+            .notification-header {
+                padding: 18px 24px;
+                background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+                position: sticky;
+                top: 0;
+                z-index: 10;
+            }
+            
+            .notification-list {
+                max-height: 520px;
+                padding: 8px 0;
+                overflow-y: auto;
+                overflow-x: hidden;
+            }
+            
+            /* Ensure proper positioning relative to parent */
+            #notificationContainer {
+                position: relative;
+            }
+            
+            /* Better scrollbar for desktop */
+            .notification-list::-webkit-scrollbar {
+                width: 6px;
+            }
+            
+            .notification-list::-webkit-scrollbar-track {
+                background: #f8fafc;
+            }
+            
+            .notification-list::-webkit-scrollbar-thumb {
+                background: #cbd5e0;
+                border-radius: 3px;
+            }
+            
+            .notification-list::-webkit-scrollbar-thumb:hover {
+                background: #a0aec0;
+            }
+            
+            /* Ensure user info is visible on desktop/laptop */
+            .topbar .text-end {
+                display: block !important;
+            }
+        }
+
         .notification-header {
             padding: 16px 20px;
             border-bottom: 1px solid #e8ecf4;
@@ -798,6 +861,44 @@
 
         .notification-list {
             max-height: 420px;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .notification-item {
+            padding: 16px 20px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .notification-item:hover {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        }
+
+        .notification-item.unread {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border-left: 4px solid #3b82f6;
+        }
+
+        .notification-item-content {
+            font-size: 0.9rem;
+            color: #334155;
+            line-height: 1.5;
+            margin-bottom: 4px;
+            white-space: pre-wrap;
+        }
+
+        .notification-item-time {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
             overflow-y: auto;
         }
 
@@ -1019,11 +1120,80 @@
             opacity: 0;
             transform: translateY(-10px);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            visibility: hidden;
         }
         
         .notification-dropdown.show {
             opacity: 1;
             transform: translateY(0);
+            visibility: visible;
+        }
+
+        /* Ensure notification container positioning */
+        #notificationContainer {
+            position: relative;
+        }
+
+        /* Desktop notification improvements */
+        @media (min-width: 1024px) {
+            .notification-dropdown {
+                width: 420px;
+                max-height: 650px;
+            }
+            
+            .notification-list {
+                max-height: 570px;
+            }
+        }
+
+        /* Tablet and larger screens - ensure user info is visible */
+        @media (min-width: 577px) {
+            .topbar .text-end {
+                display: block !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+            }
+            
+            .topbar .text-end .fw-bold {
+                font-size: 0.95rem;
+                color: #1e2139 !important;
+            }
+            
+            .topbar .text-end .text-muted {
+                font-size: 0.8rem !important;
+                color: #6c7293 !important;
+            }
+        }
+
+        /* Ensure user info section has proper styling */
+        #userInfoSection {
+            min-width: 120px;
+            text-align: right;
+        }
+
+        #userInfoSection .fw-bold {
+            font-weight: 600;
+            line-height: 1.2;
+            margin-bottom: 2px;
+        }
+
+        #userInfoSection .text-muted {
+            line-height: 1.1;
+        }
+
+        /* Prevent notification from being cut off by viewport */
+        @media (min-width: 769px) {
+            .notification-dropdown {
+                /* Ensure dropdown stays within viewport */
+                max-width: calc(100vw - 40px);
+            }
+            
+            /* If dropdown would go off-screen, adjust position */
+            .notification-dropdown.adjust-position {
+                right: auto;
+                left: 0;
+                transform-origin: top left;
+            }
         }
 
         /* Mobile notification backdrop */
@@ -1432,14 +1602,22 @@
             </div>
             {% endif %}
 
-            <div class="text-end me-3">
-                <div class="fw-bold text-dark">{{ request.user.get_full_name|default:request.user.username }}</div>
+            <div class="text-end me-3" id="userInfoSection">
+                <div class="fw-bold text-dark">
+                    {{ request.user.get_full_name|default:request.user.username|default:"No Name" }}
+                </div>
                 <div class="text-muted small" style="font-size: 0.8rem;">
                     {% if request.user.employee_profile and request.user.employee_profile.designation %}
                     {{ request.user.employee_profile.designation }}
                     {% else %}
-                    {{ request.user.role|title }}
+                    {{ request.user.role|title|default:"No Role" }}
                     {% endif %}
+                </div>
+                <!-- Debug info - remove after testing -->
+                <div class="text-danger small" style="font-size: 0.7rem; display: none;" id="debugInfo">
+                    User: {{ request.user.username }}<br>
+                    Profile: {% if request.user.employee_profile %}Yes{% else %}No{% endif %}<br>
+                    Role: {{ request.user.role }}
                 </div>
             </div>
             <div class="dropdown">
@@ -1901,7 +2079,14 @@
             isDropdownOpen = !isDropdownOpen;
 
             if (isDropdownOpen) {
+                // Check if dropdown would go off-screen on desktop
+                if (window.innerWidth > 768) {
+                    adjustNotificationPosition();
+                }
+                
                 notificationDropdown.style.display = 'block';
+                // Force reflow before adding show class for smooth animation
+                notificationDropdown.offsetHeight;
                 notificationDropdown.classList.add('show');
                 
                 // Add backdrop for mobile
@@ -1914,6 +2099,32 @@
                 closeNotificationDropdown();
             }
         });
+
+        function adjustNotificationPosition() {
+            const container = document.getElementById('notificationContainer');
+            const dropdown = notificationDropdown;
+            const containerRect = container.getBoundingClientRect();
+            const dropdownWidth = 420; // Max width from CSS
+            
+            // For desktop, use fixed positioning and calculate position relative to viewport
+            if (window.innerWidth > 768) {
+                dropdown.style.position = 'fixed';
+                dropdown.style.top = (containerRect.bottom + 10) + 'px';
+                
+                // Check if dropdown would go off the right edge
+                if (containerRect.right - dropdownWidth < 20) {
+                    // Position from left edge of container
+                    dropdown.style.left = (containerRect.left) + 'px';
+                    dropdown.style.right = 'auto';
+                    dropdown.classList.add('adjust-position');
+                } else {
+                    // Position from right edge of container
+                    dropdown.style.right = (window.innerWidth - containerRect.right) + 'px';
+                    dropdown.style.left = 'auto';
+                    dropdown.classList.remove('adjust-position');
+                }
+            }
+        }
 
         function createNotificationBackdrop() {
             // Remove existing backdrop
@@ -1951,8 +2162,19 @@
         }
 
         function closeNotificationDropdown() {
-            notificationDropdown.style.display = 'none';
             notificationDropdown.classList.remove('show');
+            
+            // Wait for animation to complete before hiding
+            setTimeout(() => {
+                notificationDropdown.style.display = 'none';
+                // Reset position classes and styles
+                notificationDropdown.classList.remove('adjust-position');
+                notificationDropdown.style.position = '';
+                notificationDropdown.style.top = '';
+                notificationDropdown.style.right = '';
+                notificationDropdown.style.left = '';
+            }, 300);
+            
             isDropdownOpen = false;
             
             // Remove backdrop
@@ -1982,6 +2204,35 @@
         closeNotificationBtn.addEventListener('click', function (e) {
             e.stopPropagation();
             closeNotificationDropdown();
+        });
+
+        // Handle window resize to adjust notification position
+        window.addEventListener('resize', function() {
+            if (isDropdownOpen && window.innerWidth > 768) {
+                adjustNotificationPosition();
+            }
+        });
+
+        // Debug user info visibility - remove after testing
+        document.addEventListener('DOMContentLoaded', function() {
+            const userInfoSection = document.getElementById('userInfoSection');
+            const debugInfo = document.getElementById('debugInfo');
+            
+            if (userInfoSection) {
+                console.log('User info section found:', userInfoSection);
+                console.log('Computed style:', window.getComputedStyle(userInfoSection));
+                console.log('Display:', window.getComputedStyle(userInfoSection).display);
+                console.log('Visibility:', window.getComputedStyle(userInfoSection).visibility);
+                
+                // Show debug info on double-click
+                userInfoSection.addEventListener('dblclick', function() {
+                    if (debugInfo) {
+                        debugInfo.style.display = debugInfo.style.display === 'none' ? 'block' : 'none';
+                    }
+                });
+            } else {
+                console.error('User info section not found!');
+            }
         });
 
         // Load notifications

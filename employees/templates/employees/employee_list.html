@@ -327,6 +327,48 @@
         flex-wrap: wrap;
     }
 
+    /* Enhanced horizontal layout for desktop/laptop */
+    @media (min-width: 992px) {
+        .action-buttons {
+            flex-wrap: nowrap;
+            justify-content: flex-start;
+            align-items: center;
+            min-width: 280px; /* Ensure enough space for all buttons */
+        }
+        
+        .btn-action {
+            flex-shrink: 0; /* Prevent buttons from shrinking */
+            white-space: nowrap;
+        }
+        
+        /* Ensure Actions column has enough width */
+        .employees-table th:last-child,
+        .employees-table td:last-child {
+            min-width: 300px;
+            width: 300px;
+        }
+    }
+    
+    /* Ensure horizontal layout on large screens */
+    @media (min-width: 1200px) {
+        .action-buttons {
+            gap: 0.75rem;
+            min-width: 320px;
+        }
+        
+        .btn-action {
+            padding: 0.6rem 1rem;
+            font-size: 0.8rem;
+        }
+        
+        /* More space for Actions column on large screens */
+        .employees-table th:last-child,
+        .employees-table td:last-child {
+            min-width: 350px;
+            width: 350px;
+        }
+    }
+
     .btn-action {
         padding: 0.5rem 0.75rem;
         border-radius: 8px;
@@ -340,6 +382,8 @@
         align-items: center;
         gap: 0.25rem;
         white-space: nowrap;
+        flex-shrink: 0; /* Prevent shrinking */
+        min-width: fit-content; /* Ensure button maintains its size */
     }
 
     .btn-edit {

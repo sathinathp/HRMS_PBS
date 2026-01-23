@@ -4,6 +4,7 @@
 {% block title %}My Profile | Petabytz{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/employee-profile-enhanced-responsive.css' %}">
 <style>
     /* ... (Styles kept compact to save lines/tokens, verified they are good) ... */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -2564,6 +2565,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/employee-profile-enhanced-responsive.js' %}"></script>
 <script>
     // Initialize tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
