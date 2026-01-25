@@ -241,6 +241,18 @@ class LeaveApplicationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
+        
+        # Make required fields mandatory
+        self.fields['leave_type'].required = True
+        self.fields['start_date'].required = True
+        self.fields['end_date'].required = True
+        self.fields['reason'].required = True
+        
+        # Add required attribute to widgets
+        self.fields['leave_type'].widget.attrs['required'] = True
+        self.fields['start_date'].widget.attrs['required'] = True
+        self.fields['end_date'].widget.attrs['required'] = True
+        self.fields['reason'].widget.attrs['required'] = True
 
     def clean(self):
         cleaned_data = super().clean()
@@ -342,6 +354,20 @@ class RegularizationRequestForm(forms.ModelForm):
                 }
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make all fields required
+        self.fields['date'].required = True
+        self.fields['check_in'].required = True
+        self.fields['check_out'].required = True
+        self.fields['reason'].required = True
+        
+        # Add required attribute to widgets
+        self.fields['date'].widget.attrs['required'] = True
+        self.fields['check_in'].widget.attrs['required'] = True
+        self.fields['check_out'].widget.attrs['required'] = True
+        self.fields['reason'].widget.attrs['required'] = True
 
     def clean(self):
         cleaned_data = super().clean()

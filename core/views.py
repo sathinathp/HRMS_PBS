@@ -2579,38 +2579,10 @@ def leave_requests(request):
 
                 # Only transition and deduct if this wasn't already approved
                 if prev_status != "APPROVED":
-                    leave_request.status = "APPROVED"
-
-                    leave_request.approved_by = request.user
-
-                    leave_request.approved_at = timezone.now()
-
-                    leave_request.admin_comment = admin_comment
-
-                    # Update leave balance
-
-                    balance = leave_request.employee.leave_balance
-
-                    days = leave_request.total_days
-
-                    if leave_request.leave_type == "CL":
-                        balance.casual_leave_used += days
-
-                    elif leave_request.leave_type == "SL":
-                        balance.sick_leave_used += days
-
-                    elif leave_request.leave_type == "EL":
-                        balance.earned_leave_used += days
-
-                    elif leave_request.leave_type == "CO":
-                        balance.comp_off_used += days
-
-                    elif leave_request.leave_type == "UL":
-                        balance.unpaid_leave += days
-
-                    balance.save()
-
-                    leave_request.save()
+                    # Use the model's approve_leave method to handle all balance updates properly
+                    if leave_request.approve_leave(request.user, approval_type="FULL"):
+                        leave_request.admin_comment = admin_comment
+                        leave_request.save()
 
                     messages.success(
                         request,

@@ -1032,6 +1032,7 @@ class LeaveBalance(models.Model):
             self.sick_leave_used += days_approved
         elif leave_type == "UL":
             self.unpaid_leave += days_approved
+        # OD (On Duty) and OT (Others) don't affect leave balance
 
         self.save()
 

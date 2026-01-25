@@ -36,6 +36,7 @@
         margin: 0 auto;
         width: 100%;
         box-sizing: border-box;
+        overflow-x: hidden; /* Prevent horizontal overflow */
     }
 
     /* Header Section */
@@ -200,6 +201,54 @@
     /* Desktop Grid Layout */
     .desktop-layout {
         display: block;
+        width: 100%;
+        overflow-x: auto; /* Allow horizontal scrolling if needed */
+    }
+
+    /* Wrapper for desktop table to handle overflow */
+    .desktop-table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 #f1f5f9;
+        position: relative;
+    }
+
+    .desktop-table-wrapper::-webkit-scrollbar {
+        height: 8px;
+    }
+
+    .desktop-table-wrapper::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 4px;
+    }
+
+    .desktop-table-wrapper::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+    }
+
+    .desktop-table-wrapper::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+
+    /* Scroll indicator for when content overflows */
+    .desktop-table-wrapper::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 20px;
+        height: 100%;
+        background: linear-gradient(to left, rgba(241, 245, 249, 0.8) 0%, transparent 100%);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .desktop-table-wrapper.has-scroll::after {
+        opacity: 1;
     }
 
     /* Mobile Card Layout */
@@ -219,7 +268,7 @@
         border-radius: var(--radius-md);
         padding: 1rem 1.5rem;
         display: grid;
-        grid-template-columns: 2fr 1.2fr 2.5fr 2.5fr 0.8fr;
+        grid-template-columns: minmax(180px, 1.5fr) minmax(80px, 0.7fr) minmax(200px, 2.5fr) minmax(200px, 2.5fr) minmax(60px, 0.8fr);
         align-items: center;
         gap: 1rem;
         box-shadow: var(--shadow-soft);
@@ -228,6 +277,7 @@
         animation: slideUp 0.4s ease-out forwards;
         opacity: 0;
         width: 100%;
+        min-width: 800px; /* Minimum width to prevent cramping */
         box-sizing: border-box;
     }
 
@@ -240,7 +290,7 @@
     /* Column Styles */
     .col-header {
         display: grid;
-        grid-template-columns: 2fr 1.2fr 2.5fr 2.5fr 0.8fr;
+        grid-template-columns: minmax(180px, 1.5fr) minmax(80px, 0.7fr) minmax(200px, 2.5fr) minmax(200px, 2.5fr) minmax(60px, 0.8fr);
         padding: 0 1.5rem 1rem;
         gap: 1rem;
         font-size: 0.75rem;
@@ -248,6 +298,7 @@
         letter-spacing: 0.05em;
         color: var(--text-muted);
         font-weight: 700;
+        min-width: 800px; /* Match employee card minimum width */
     }
 
     /* Mobile Employee Card */
@@ -381,6 +432,98 @@
         display: flex;
         align-items: center;
         gap: 1rem;
+        min-width: 0; /* Allow flex items to shrink */
+        overflow: hidden; /* Prevent overflow */
+    }
+
+    .user-profile > div {
+        min-width: 0; /* Allow text container to shrink */
+        flex: 1;
+    }
+
+    .user-profile h6 {
+        margin-bottom: 0;
+        font-weight: bold;
+        color: var(--text-main);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        cursor: help;
+        position: relative;
+    }
+
+    .user-profile small {
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+        max-width: 100%;
+        cursor: help;
+        position: relative;
+    }
+
+    /* Tooltip styles for user profile */
+    .user-profile h6:hover::after,
+    .user-profile small:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: normal;
+        white-space: nowrap;
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: tooltipFadeIn 0.2s ease-out;
+        pointer-events: none;
+        max-width: 300px;
+        word-break: break-all;
+        white-space: normal;
+        line-height: 1.3;
+        margin-bottom: 5px;
+    }
+
+    .user-profile h6:hover::before,
+    .user-profile small:hover::before {
+        content: '';
+        position: absolute;
+        bottom: 94%;
+        left: 12px;
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 5px solid rgba(0, 0, 0, 0.9);
+        z-index: 1001;
+        animation: tooltipFadeIn 0.2s ease-out;
+    }
+
+    /* Ensure tooltips don't show if text isn't truncated */
+    .user-profile h6:not([title*="..."]):hover::after,
+    .user-profile small:not([title*="..."]):hover::after,
+    .badge-dept:not([title*="..."]):hover::after {
+        display: none;
+    }
+
+    /* Mobile tooltip adjustments */
+    @media (max-width: 991px) {
+        .user-profile h6:hover::after,
+        .user-profile small:hover::after,
+        .badge-dept:hover::after {
+            display: none; /* Hide tooltips on mobile to avoid issues */
+        }
+        
+        .user-profile h6:hover::before,
+        .user-profile small:hover::before,
+        .badge-dept:hover::before {
+            display: none;
+        }
     }
 
     .user-avatar {
@@ -520,6 +663,18 @@
         }
     }
 
+    @keyframes tooltipFadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
     /* Badge */
     .badge-dept {
         background: #f1f5f9;
@@ -530,6 +685,48 @@
         font-weight: 600;
         letter-spacing: 0.02em;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        display: inline-block;
+        cursor: help;
+        position: relative;
+    }
+
+    /* Tooltip styles for role badge */
+    .badge-dept:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: normal;
+        white-space: nowrap;
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: tooltipFadeIn 0.2s ease-out;
+        pointer-events: none;
+        margin-bottom: 5px;
+    }
+
+    .badge-dept:hover::before {
+        content: '';
+        position: absolute;
+        bottom: 94%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 5px solid rgba(0, 0, 0, 0.9);
+        z-index: 1001;
+        animation: tooltipFadeIn 0.2s ease-out;
     }
 
     /* Toast */
@@ -558,8 +755,8 @@
 
     /* === COMPREHENSIVE RESPONSIVE DESIGN === */
 
-    /* Global mobile layout activation for all screens below 768px */
-    @media (max-width: 767px) {
+    /* Global mobile layout activation for all screens below 992px */
+    @media (max-width: 991px) {
         .desktop-layout {
             display: none !important;
         }
@@ -581,6 +778,41 @@
         .d-none.d-sm-inline,
         .d-none.d-sm-block {
             display: none !important;
+        }
+    }
+
+    /* Additional breakpoint for medium screens that still need desktop layout */
+    @media (max-width: 1024px) and (min-width: 992px) {
+        .employee-card {
+            min-width: 680px;
+            grid-template-columns: minmax(140px, 1.2fr) minmax(60px, 0.5fr) minmax(160px, 1.8fr) minmax(160px, 1.8fr) minmax(50px, 0.6fr);
+        }
+
+        .col-header {
+            min-width: 680px;
+            grid-template-columns: minmax(140px, 1.2fr) minmax(60px, 0.5fr) minmax(160px, 1.8fr) minmax(160px, 1.8fr) minmax(50px, 0.6fr);
+        }
+
+        .control-wrapper {
+            padding: 2px;
+        }
+
+        .control-btn {
+            width: 24px;
+            height: 24px;
+            min-width: 24px;
+            min-height: 24px;
+        }
+
+        .control-input {
+            width: 40px;
+        }
+
+        .btn-save-row {
+            width: 32px;
+            height: 32px;
+            min-width: 32px;
+            min-height: 32px;
         }
     }
 
@@ -647,12 +879,14 @@
 
         .employee-card {
             padding: 1rem 1.25rem;
-            grid-template-columns: 2fr 1fr 2fr 2fr 0.8fr;
+            grid-template-columns: minmax(160px, 1.3fr) minmax(70px, 0.6fr) minmax(180px, 2fr) minmax(180px, 2fr) minmax(60px, 0.8fr);
+            min-width: 720px;
         }
 
         .col-header {
             padding: 0 1.25rem 1rem;
-            grid-template-columns: 2fr 1fr 2fr 2fr 0.8fr;
+            grid-template-columns: minmax(160px, 1.3fr) minmax(70px, 0.6fr) minmax(180px, 2fr) minmax(180px, 2fr) minmax(60px, 0.8fr);
+            min-width: 720px;
         }
     }
 
@@ -1430,17 +1664,18 @@
 
     <!-- Desktop Layout -->
     <div class="desktop-layout">
-        <!-- List Header -->
-        <div class="col-header">
-            <div>Employee</div>
-            <div>Role</div>
-            <div>Sick Leave</div>
-            <div>Casual Leave</div>
-            <div class="text-center">Save</div>
-        </div>
+        <div class="desktop-table-wrapper">
+            <!-- List Header -->
+            <div class="col-header">
+                <div>Employee</div>
+                <div>Role</div>
+                <div>Sick Leave</div>
+                <div>Casual Leave</div>
+                <div class="text-center">Save</div>
+            </div>
 
-        <!-- Employee List -->
-        <div class="employee-list" id="employeeList">
+            <!-- Employee List -->
+            <div class="employee-list" id="employeeList">
             {% for employee in employees %}
             <div class="employee-card" style="animation-delay: {{ forloop.counter0|add:'1'|stringformat:'d' }}00ms;">
                 <!-- User -->
@@ -1453,14 +1688,14 @@
                     </div>
                     {% endif %}
                     <div>
-                        <h6 class="mb-0 fw-bold text-dark">{{ employee.user.get_full_name }}</h6>
-                        <small class="text-muted">{{ employee.user.email }}</small>
+                        <h6 class="mb-0 fw-bold text-dark" title="{{ employee.user.get_full_name }}">{{ employee.user.get_full_name }}</h6>
+                        <small class="text-muted" title="{{ employee.user.email }}">{{ employee.user.email }}</small>
                     </div>
                 </div>
 
                 <!-- Role -->
                 <div>
-                    <span class="badge-dept">{{ employee.designation|default:"--" }}</span>
+                    <span class="badge-dept" title="{{ employee.designation|default:'No designation assigned' }}">{{ employee.designation|default:"--" }}</span>
                 </div>
 
                 <!-- Sick Leave Stats & Control -->
@@ -1513,6 +1748,7 @@
                 </div>
             </div>
             {% endfor %}
+            </div>
         </div>
     </div>
 
@@ -1532,10 +1768,10 @@
                             </div>
                             {% endif %}
                             <div>
-                                <h6 class="mb-0 fw-bold text-dark">{{ employee.user.get_full_name }}</h6>
-                                <small class="text-muted">{{ employee.user.email }}</small>
+                                <h6 class="mb-0 fw-bold text-dark" title="{{ employee.user.get_full_name }}">{{ employee.user.get_full_name }}</h6>
+                                <small class="text-muted" title="{{ employee.user.email }}">{{ employee.user.email }}</small>
                                 <div class="mt-1">
-                                    <span class="badge-dept">{{ employee.designation|default:"--" }}</span>
+                                    <span class="badge-dept" title="{{ employee.designation|default:'No designation assigned' }}">{{ employee.designation|default:"--" }}</span>
                                 </div>
                             </div>
                         </div>
@@ -1728,6 +1964,22 @@
     // Initialize search on page load
     document.addEventListener('DOMContentLoaded', function() {
         setupSearch();
+        setupScrollIndicator();
+    });
+
+    // Setup scroll indicator for desktop table
+    function setupScrollIndicator() {
+        const wrapper = document.querySelector('.desktop-table-wrapper');
+        if (wrapper) {
+            function checkScroll() {
+                const hasScroll = wrapper.scrollWidth > wrapper.clientWidth;
+                wrapper.classList.toggle('has-scroll', hasScroll);
+            }
+            
+            checkScroll();
+            window.addEventListener('resize', checkScroll);
+        }
+    }
 
     // Toast Logic
     function showToast(msg, type = 'success') {
@@ -1811,6 +2063,7 @@
     // Responsive behavior enhancements
     document.addEventListener('DOMContentLoaded', function() {
         setupSearch();
+        setupScrollIndicator();
         
         // Handle window resize to maintain consistency
         let resizeTimeout;
@@ -1835,6 +2088,9 @@
                         mobileInput.value = input.value;
                     }
                 });
+
+                // Recheck scroll indicator
+                setupScrollIndicator();
             }, 250);
         });
 
