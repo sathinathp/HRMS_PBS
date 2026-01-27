@@ -1,20 +1,13 @@
 import json
-import pytz
-from datetime import timedelta
-from django.conf import settings
-from django.shortcuts import render
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView, FormView
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.urls import reverse_lazy, reverse
-from django.db import transaction
-from django.db.models import Q
 from datetime import timedelta
 
+import pytz
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db import transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse, reverse_lazy
@@ -639,21 +632,23 @@ def clock_in(request):
             late_warning = None
             if session_number == 1 and (attendance.is_late or attendance.is_grace_used):
                 from datetime import timedelta
-                
+
                 seven_days_ago = today - timedelta(days=7)
-                
+
                 # Count late clock-ins in the last 7 days (excluding today)
-                late_count = Attendance.objects.filter(
-                    employee=employee,
-                    date__gte=seven_days_ago,
-                    date__lt=today,  # Exclude today
-                ).filter(
-                    Q(is_late=True) | Q(is_grace_used=True)
-                ).count()
-                
+                late_count = (
+                    Attendance.objects.filter(
+                        employee=employee,
+                        date__gte=seven_days_ago,
+                        date__lt=today,  # Exclude today
+                    )
+                    .filter(Q(is_late=True) | Q(is_grace_used=True))
+                    .count()
+                )
+
                 # Include today's late arrival in the count
                 total_late_count = late_count + 1
-                
+
                 # Prepare warning message
                 if total_late_count >= 5:
                     late_warning = {
@@ -661,7 +656,7 @@ def clock_in(request):
                         "late_count": total_late_count,
                         "message": f"You have been late {total_late_count} times in the last 7 days.",
                         "action": "LOP will be applied. Please ensure timely attendance.",
-                        "severity": "critical"
+                        "severity": "critical",
                     }
                 else:
                     late_warning = {
@@ -669,7 +664,7 @@ def clock_in(request):
                         "late_count": total_late_count,
                         "message": f"You have been late {total_late_count} times in the last 7 days.",
                         "action": "Please ensure timely attendance to avoid LOP.",
-                        "severity": "warning"
+                        "severity": "warning",
                     }
 
             response_data = {
@@ -681,17 +676,14 @@ def clock_in(request):
                 "total_sessions_today": attendance.daily_sessions_count,
                 "max_sessions": attendance.max_daily_sessions,
             }
-            
+
             # Add late warning if applicable
             if late_warning:
                 response_data["late_warning"] = late_warning
-            
+
             return JsonResponse(response_data)
 
         except Exception as e:
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.error(f"Clock-in error: {str(e)}", exc_info=True)
             # print(f"Clock-in error: {str(e)}")
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
@@ -824,9 +816,6 @@ def clock_out(request):
                 )
 
         except Exception as e:
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.error(f"Clock-out error: {str(e)}", exc_info=True)
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
@@ -1105,44 +1094,49 @@ def employee_profile(request):
             # Only allow Company Admins to assign shifts
             if request.user.role != User.Role.COMPANY_ADMIN and not request.user.is_superuser:
                 from django.contrib import messages
+
                 messages.error(request, "You don't have permission to assign shifts.")
                 return redirect("employee_profile")
 
             try:
                 from companies.models import ShiftSchedule
-                
+
                 shift_id = request.POST.get("assigned_shift")
                 if shift_id:
                     shift = ShiftSchedule.objects.get(id=shift_id, company=request.user.company)
                     old_shift_name = employee.assigned_shift.name if employee.assigned_shift else "None"
                     employee.assigned_shift = shift
                     employee.save(update_fields=["assigned_shift"])
-                    
+
                     from django.contrib import messages
+
                     messages.success(
-                        request, 
-                        f"Shift assignment updated from '{old_shift_name}' to '{shift.name}' for {employee.user.get_full_name()}."
+                        request,
+                        f"Shift assignment updated from '{old_shift_name}' to '{shift.name}' for {employee.user.get_full_name()}.",
                     )
                 else:
                     # Remove shift assignment
                     old_shift_name = employee.assigned_shift.name if employee.assigned_shift else "None"
                     employee.assigned_shift = None
                     employee.save(update_fields=["assigned_shift"])
-                    
+
                     from django.contrib import messages
+
                     messages.success(
-                        request, 
-                        f"Shift assignment removed from {employee.user.get_full_name()}. Previous shift: '{old_shift_name}'."
+                        request,
+                        f"Shift assignment removed from {employee.user.get_full_name()}. Previous shift: '{old_shift_name}'.",
                     )
-                    
+
                 return redirect("employee_profile")
-                
+
             except ShiftSchedule.DoesNotExist:
                 from django.contrib import messages
+
                 messages.error(request, "Selected shift not found.")
                 return redirect("employee_profile")
             except Exception as e:
                 from django.contrib import messages
+
                 messages.error(request, f"Error assigning shift: {str(e)}")
                 return redirect("employee_profile")
 
@@ -1194,17 +1188,15 @@ def employee_profile(request):
     emergency_contacts = employee.emergency_contacts.all().order_by("-is_primary", "created_at")
 
     # Get probation status
-    probation_status = employee.get_probation_status() if employee.date_of_joining else 'IN_PROBATION'
+    probation_status = employee.get_probation_status() if employee.date_of_joining else "IN_PROBATION"
     probation_date = employee.get_probation_end_date() if employee.date_of_joining else None
 
     # Get available shifts for the company (for shift assignment)
     available_shifts = []
     if request.user.role == User.Role.COMPANY_ADMIN or request.user.is_superuser:
         from companies.models import ShiftSchedule
-        available_shifts = ShiftSchedule.objects.filter(
-            company=request.user.company, 
-            is_active=True
-        ).order_by('name')
+
+        available_shifts = ShiftSchedule.objects.filter(company=request.user.company, is_active=True).order_by("name")
 
     return render(
         request,
@@ -1596,27 +1588,28 @@ def attendance_map(request, pk):
         map_locations = []
 
         # Determine timezone
-        target_tz = pytz.timezone("Asia/Kolkata") # Default
-        
+        target_tz = pytz.timezone("Asia/Kolkata")  # Default
+
         if attendance.user_timezone:
-             try:
-                 target_tz = pytz.timezone(attendance.user_timezone)
-             except:
-                 pass
-        elif employee.location and hasattr(employee.location, 'timezone') and employee.location.timezone:
-             try:
-                 target_tz = pytz.timezone(employee.location.timezone)
-             except:
-                 pass
-                 
+            try:
+                target_tz = pytz.timezone(attendance.user_timezone)
+            except:
+                pass
+        elif employee.location and hasattr(employee.location, "timezone") and employee.location.timezone:
+            try:
+                target_tz = pytz.timezone(employee.location.timezone)
+            except:
+                pass
+
         # Activate timezone for the template
         timezone.activate(target_tz)
 
         # Helper for time formatting
         def format_time(dt):
-            if not dt: return ""
+            if not dt:
+                return ""
             local_dt = timezone.localtime(dt, target_tz)
-            return local_dt.strftime('%I:%M %p')
+            return local_dt.strftime("%I:%M %p")
 
         # 1. Clock In
         if attendance.location_in:
@@ -1687,49 +1680,54 @@ def employee_detail(request, pk):
         # Handle POST requests for shift assignment
         if request.method == "POST":
             action = request.POST.get("action")
-            
+
             if action == "assign_shift":
                 # Only allow Company Admins to assign shifts
                 if not is_admin:
                     from django.contrib import messages
+
                     messages.error(request, "You don't have permission to assign shifts.")
                     return redirect("employee_detail", pk=pk)
 
                 try:
                     from companies.models import ShiftSchedule
-                    
+
                     shift_id = request.POST.get("assigned_shift")
                     if shift_id:
                         shift = ShiftSchedule.objects.get(id=shift_id, company=user.company)
                         old_shift_name = employee.assigned_shift.name if employee.assigned_shift else "None"
                         employee.assigned_shift = shift
                         employee.save(update_fields=["assigned_shift"])
-                        
+
                         from django.contrib import messages
+
                         messages.success(
-                            request, 
-                            f"Shift assignment updated from '{old_shift_name}' to '{shift.name}' for {employee.user.get_full_name()}."
+                            request,
+                            f"Shift assignment updated from '{old_shift_name}' to '{shift.name}' for {employee.user.get_full_name()}.",
                         )
                     else:
                         # Remove shift assignment
                         old_shift_name = employee.assigned_shift.name if employee.assigned_shift else "None"
                         employee.assigned_shift = None
                         employee.save(update_fields=["assigned_shift"])
-                        
+
                         from django.contrib import messages
+
                         messages.success(
-                            request, 
-                            f"Shift assignment removed from {employee.user.get_full_name()}. Previous shift: '{old_shift_name}'."
+                            request,
+                            f"Shift assignment removed from {employee.user.get_full_name()}. Previous shift: '{old_shift_name}'.",
                         )
-                        
+
                     return redirect("employee_detail", pk=pk)
-                    
+
                 except ShiftSchedule.DoesNotExist:
                     from django.contrib import messages
+
                     messages.error(request, "Selected shift not found.")
                     return redirect("employee_detail", pk=pk)
                 except Exception as e:
                     from django.contrib import messages
+
                     messages.error(request, f"Error assigning shift: {str(e)}")
                     return redirect("employee_detail", pk=pk)
 
@@ -1747,14 +1745,13 @@ def employee_detail(request, pk):
         end_date = timezone.datetime(year, month, num_days).date()
 
         # Fetch Attendance for the period
-        attendance_records = {att.date: att for att in Attendance.objects.filter(employee=employee, date__range=[start_date, end_date])}
+        attendance_records = {
+            att.date: att for att in Attendance.objects.filter(employee=employee, date__range=[start_date, end_date])
+        }
 
         # Fetch Approved Leaves
         leaves = LeaveRequest.objects.filter(
-            employee=employee,
-            status='APPROVED',
-            start_date__lte=end_date,
-            end_date__gte=start_date
+            employee=employee, status="APPROVED", start_date__lte=end_date, end_date__gte=start_date
         )
         leave_dates = {}
         for l in leaves:
@@ -1764,17 +1761,16 @@ def employee_detail(request, pk):
                 curr += timedelta(days=1)
 
         # Fetch Holidays
-        from companies.models import Holiday
         from django.db.models import Q
-        
+
+        from companies.models import Holiday
+
         holiday_q = Q(location__isnull=True)
         if employee.location:
             holiday_q |= Q(location=employee.location)
-            
+
         holidays = Holiday.objects.filter(
-            company=employee.company,
-            date__range=[start_date, end_date],
-            is_active=True
+            company=employee.company, date__range=[start_date, end_date], is_active=True
         ).filter(holiday_q)
         holiday_dates = {h.date: h.name for h in holidays}
 
@@ -1800,19 +1796,23 @@ def employee_detail(request, pk):
                     status = "MISSED"
 
                 # Mock attendance object for template
-                full_history.append({
-                    'date': curr_date,
-                    'status': status,
-                    'id': None,
-                    'effective_hours': "-",
-                    'clock_in': None,
-                    'clock_out': None,
-                    'holiday_name': holiday_dates.get(curr_date)
-                })
+                full_history.append(
+                    {
+                        "date": curr_date,
+                        "status": status,
+                        "id": None,
+                        "effective_hours": "-",
+                        "clock_in": None,
+                        "clock_out": None,
+                        "holiday_name": holiday_dates.get(curr_date),
+                    }
+                )
             curr_date -= timedelta(days=1)
 
         # QuerySet for map logic and stats (original records)
-        attendance_qs = Attendance.objects.filter(employee=employee, date__range=[start_date, end_date]).order_by("-date")
+        attendance_qs = Attendance.objects.filter(employee=employee, date__range=[start_date, end_date]).order_by(
+            "-date"
+        )
 
         # Calculate Stats (using the full history)
         total_days = len(full_history)
@@ -1820,20 +1820,20 @@ def employee_detail(request, pk):
         wfh = 0
         leave = 0
         absent = 0
-        
+
         for item in full_history:
             if isinstance(item, Attendance):
                 status = item.status
             else:
-                status = item.get('status')
-                
-            if status == 'PRESENT':
+                status = item.get("status")
+
+            if status == "PRESENT":
                 present += 1
-            elif status == 'WFH':
+            elif status == "WFH":
                 wfh += 1
-            elif status == 'LEAVE':
+            elif status == "LEAVE":
                 leave += 1
-            elif status in ['ABSENT', 'MISSED']:
+            elif status in ["ABSENT", "MISSED"]:
                 absent += 1
 
         # Location Data for Map (Today's path or last active day)
@@ -1853,12 +1853,14 @@ def employee_detail(request, pk):
         if map_attendance:
             # Determine timezone
             import pytz
+
             tz_name = employee.location.timezone if employee.location else "Asia/Kolkata"
             local_tz = pytz.timezone(tz_name)
 
             def format_local_time(dt):
-                if not dt: return ""
-                return timezone.localtime(dt, local_tz).strftime('%I:%M %p')
+                if not dt:
+                    return ""
+                return timezone.localtime(dt, local_tz).strftime("%I:%M %p")
 
             # Clock In Marker
             if map_attendance.location_in:
@@ -1870,7 +1872,7 @@ def employee_detail(request, pk):
                             "lng": lng,
                             "title": f"Clock In ({format_local_time(map_attendance.clock_in)})",
                             "type": "start",
-                            "time_display": format_local_time(map_attendance.clock_in)
+                            "time_display": format_local_time(map_attendance.clock_in),
                         }
                     )
 
@@ -1878,10 +1880,12 @@ def employee_detail(request, pk):
             day_start = timezone.make_aware(timezone.datetime.combine(map_date, timezone.datetime.min.time()))
             day_end = timezone.make_aware(timezone.datetime.combine(map_date, timezone.datetime.max.time()))
 
-            logs = LocationLog.objects.filter(employee=employee, timestamp__range=[day_start, day_end]).order_by("timestamp")
+            logs = LocationLog.objects.filter(employee=employee, timestamp__range=[day_start, day_end]).order_by(
+                "timestamp"
+            )
 
             for log in logs:
-                title = "Location Punch" if log.log_type == 'HOURLY' else "Movement Log"
+                title = "Location Punch" if log.log_type == "HOURLY" else "Movement Log"
                 map_data.append(
                     {
                         "lat": float(log.latitude),
@@ -1889,7 +1893,7 @@ def employee_detail(request, pk):
                         "title": f"{title} ({format_local_time(log.timestamp)})",
                         "type": "log",
                         "log_type": log.log_type,
-                        "time_display": format_local_time(log.timestamp)
+                        "time_display": format_local_time(log.timestamp),
                     }
                 )
 
@@ -1903,10 +1907,9 @@ def employee_detail(request, pk):
                             "lng": lng,
                             "title": f"Clock Out ({format_local_time(map_attendance.clock_out)})",
                             "type": "end",
-                            "time_display": format_local_time(map_attendance.clock_out)
+                            "time_display": format_local_time(map_attendance.clock_out),
                         }
                     )
-
 
         # Calculate Probation Date (3 months from joining)
         probation_date = None
@@ -1919,10 +1922,8 @@ def employee_detail(request, pk):
         available_shifts = []
         if is_admin:
             from companies.models import ShiftSchedule
-            available_shifts = ShiftSchedule.objects.filter(
-                company=user.company, 
-                is_active=True
-            ).order_by('name')
+
+            available_shifts = ShiftSchedule.objects.filter(company=user.company, is_active=True).order_by("name")
 
         context = {
             "employee": employee,
@@ -2357,7 +2358,7 @@ def approve_exit_initiative(request, pk):
                 recipients.append(employee.personal_email)
 
             subject = f"Exit Initiative Approved - {exit_initiative.get_exit_type_display()}"
-            
+
             # Plain text version
             text_message = f"""
 Dear {employee.user.get_full_name()},
@@ -2378,7 +2379,7 @@ Please complete all exit formalities before your last working day.
 Regards,
 {employee.company.name} HR Team
             """
-            
+
             # HTML version
             html_message = f"""
 <!DOCTYPE html>
@@ -2399,18 +2400,18 @@ Regards,
                             <p style="margin: 10px 0 0 0; color: #dcfce7; font-size: 14px;">{exit_initiative.get_exit_type_display()}</p>
                         </td>
                     </tr>
-                    
+
                     <!-- Body -->
                     <tr>
                         <td style="padding: 40px 30px;">
                             <p style="margin: 0 0 24px 0; color: #1f2937; font-size: 16px; line-height: 1.6;">
                                 Dear <strong>{employee.user.get_full_name()}</strong>,
                             </p>
-                            
+
                             <p style="margin: 0 0 30px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
                                 Your <strong>{exit_initiative.get_exit_type_display().lower()}</strong> request has been <span style="color: #16a34a; font-weight: 600;">approved</span>.
                             </p>
-                            
+
                             <!-- Details Box -->
                             <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9fafb; border-radius: 8px; border-left: 4px solid #22c55e; margin-bottom: 30px;">
                                 <tr>
@@ -2432,7 +2433,7 @@ Regards,
                                     </td>
                                 </tr>
                             </table>
-                            
+
                             <!-- Reason Section -->
                             <div style="margin-bottom: 30px;">
                                 <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Reason for Exit:</p>
@@ -2440,7 +2441,7 @@ Regards,
                                     <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.6; font-style: italic;">{exit_initiative.exit_note}</p>
                                 </div>
                             </div>
-                            
+
                             <!-- Important Notice -->
                             <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
                                 <p style="margin: 0 0 8px 0; color: #991b1b; font-size: 14px; font-weight: 600;">⚠️ Important Notice:</p>
@@ -2448,7 +2449,7 @@ Regards,
                                     On your last working day, your account will be changed to <strong>Ex-Employee</strong> type and access will be disabled.
                                 </p>
                             </div>
-                            
+
                             <!-- Action Items -->
                             <div style="background-color: #eff6ff; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
                                 <p style="margin: 0 0 12px 0; color: #1e40af; font-size: 14px; font-weight: 600;">📋 Next Steps:</p>
@@ -2460,17 +2461,17 @@ Regards,
                                     <li>Update your personal contact information for future correspondence</li>
                                 </ul>
                             </div>
-                            
+
                             <p style="margin: 0 0 8px 0; color: #4b5563; font-size: 14px; line-height: 1.6;">
                                 Please complete all exit formalities before your last working day.
                             </p>
-                            
+
                             <p style="margin: 24px 0 0 0; color: #6b7280; font-size: 13px; line-height: 1.6;">
                                 If you have any questions, please contact the HR department.
                             </p>
                         </td>
                     </tr>
-                    
+
                     <!-- Footer -->
                     <tr>
                         <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
@@ -2584,7 +2585,7 @@ def reject_exit_initiative(request, pk):
                 recipients.append(employee.personal_email)
 
             subject = f"Exit Initiative Rejected - {exit_initiative.get_exit_type_display()}"
-            
+
             # Plain text version
             text_message = f"""
 Dear {employee.user.get_full_name()},
@@ -2602,7 +2603,7 @@ If you have any questions, please contact HR.
 Regards,
 {employee.company.name} HR Team
             """
-            
+
             # HTML version
             html_message = f"""
 <!DOCTYPE html>
@@ -2623,18 +2624,18 @@ Regards,
                             <p style="margin: 10px 0 0 0; color: #fecaca; font-size: 14px;">{exit_initiative.get_exit_type_display()}</p>
                         </td>
                     </tr>
-                    
+
                     <!-- Body -->
                     <tr>
                         <td style="padding: 40px 30px;">
                             <p style="margin: 0 0 24px 0; color: #1f2937; font-size: 16px; line-height: 1.6;">
                                 Dear <strong>{employee.user.get_full_name()}</strong>,
                             </p>
-                            
+
                             <p style="margin: 0 0 30px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
                                 Your <strong>{exit_initiative.get_exit_type_display().lower()}</strong> request has been <span style="color: #dc2626; font-weight: 600;">rejected</span>.
                             </p>
-                            
+
                             <!-- Details Box -->
                             <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9fafb; border-radius: 8px; border-left: 4px solid #ef4444; margin-bottom: 30px;">
                                 <tr>
@@ -2652,7 +2653,7 @@ Regards,
                                     </td>
                                 </tr>
                             </table>
-                            
+
                             <!-- Rejection Reason Section -->
                             <div style="margin-bottom: 30px;">
                                 <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Reason for Rejection:</p>
@@ -2660,7 +2661,7 @@ Regards,
                                     <p style="margin: 0; color: #7f1d1d; font-size: 14px; line-height: 1.6;">{rejection_reason}</p>
                                 </div>
                             </div>
-                            
+
                             <!-- Status Notice -->
                             <div style="background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
                                 <p style="margin: 0 0 8px 0; color: #065f46; font-size: 14px; font-weight: 600;">✓ Your Employment Status:</p>
@@ -2668,7 +2669,7 @@ Regards,
                                     Your employment status remains <strong>Active</strong>. You can continue working as usual.
                                 </p>
                             </div>
-                            
+
                             <!-- Next Steps -->
                             <div style="background-color: #eff6ff; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
                                 <p style="margin: 0 0 12px 0; color: #1e40af; font-size: 14px; font-weight: 600;">💬 Need to Discuss?</p>
@@ -2681,13 +2682,13 @@ Regards,
                                     <li>Submit a new request if circumstances change</li>
                                 </ul>
                             </div>
-                            
+
                             <p style="margin: 0; color: #6b7280; font-size: 13px; line-height: 1.6;">
                                 We appreciate your understanding and continued contribution to the organization.
                             </p>
                         </td>
                     </tr>
-                    
+
                     <!-- Footer -->
                     <tr>
                         <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
@@ -2844,7 +2845,7 @@ def get_attendance_map_data(request, pk):
             ).order_by("timestamp")
 
             for log in logs:
-                title = "Location Punch" if log.log_type == 'HOURLY' else "Movement Log"
+                title = "Location Punch" if log.log_type == "HOURLY" else "Movement Log"
                 map_locations.append(
                     {
                         "lat": float(log.latitude),
@@ -3528,111 +3529,119 @@ def run_monthly_accrual(request):
 def bulk_leave_upload(request):
     """Handle bulk leave balance upload"""
     from django.contrib import messages
-    from .forms import BulkLeaveUploadForm, PANDAS_AVAILABLE
-    
+
+    from .forms import PANDAS_AVAILABLE, BulkLeaveUploadForm
+
     user = request.user
     if user.role not in [User.Role.COMPANY_ADMIN]:
         messages.error(request, "Permission Denied. Only Company Admins can upload bulk leave data.")
         return redirect("leave_configuration")
-    
+
     if not PANDAS_AVAILABLE:
         messages.error(request, "Bulk upload feature is not available. Please install pandas and openpyxl packages.")
         return redirect("leave_configuration")
-    
-    if request.method == 'POST':
+
+    if request.method == "POST":
         form = BulkLeaveUploadForm(request.POST, request.FILES)
         if form.is_valid():
             try:
                 # Validate file content
                 processed_data, errors = form.validate_file_content(user.company)
-                
+
                 if errors:
                     for error in errors:
                         messages.error(request, error)
-                    return render(request, 'employees/bulk_leave_upload.html', {'form': form})
-                
+                    return render(request, "employees/bulk_leave_upload.html", {"form": form})
+
                 if not processed_data:
                     messages.warning(request, "No valid data found in the uploaded file.")
-                    return render(request, 'employees/bulk_leave_upload.html', {'form': form})
-                
+                    return render(request, "employees/bulk_leave_upload.html", {"form": form})
+
                 # Process the data
-                update_mode = form.cleaned_data['update_mode']
+                update_mode = form.cleaned_data["update_mode"]
                 success_count = 0
                 error_count = 0
-                
+
                 with transaction.atomic():
                     for data in processed_data:
                         try:
-                            employee = data['employee']
-                            
+                            employee = data["employee"]
+
                             # Get or create leave balance
                             leave_balance, created = LeaveBalance.objects.get_or_create(
                                 employee=employee,
                                 defaults={
-                                    'casual_leave_allocated': 0.0,
-                                    'sick_leave_allocated': 0.0,
-                                    'casual_leave_used': 0.0,
-                                    'sick_leave_used': 0.0,
-                                    'carry_forward_leave': 0.0
-                                }
+                                    "casual_leave_allocated": 0.0,
+                                    "sick_leave_allocated": 0.0,
+                                    "casual_leave_used": 0.0,
+                                    "sick_leave_used": 0.0,
+                                    "carry_forward_leave": 0.0,
+                                },
                             )
-                            
+
                             # Log the data being processed for debugging
-                            logger.info(f"Processing bulk upload for {employee.user.get_full_name()}: "
-                                      f"CL_allocated: {data['casual_leave_allocated']}, "
-                                      f"SL_allocated: {data['sick_leave_allocated']}, "
-                                      f"CL_used: {data['casual_leave_used']}, "
-                                      f"SL_used: {data['sick_leave_used']}, "
-                                      f"CF: {data['carry_forward_leave']}")
-                            
+                            logger.info(
+                                f"Processing bulk upload for {employee.user.get_full_name()}: "
+                                f"CL_allocated: {data['casual_leave_allocated']}, "
+                                f"SL_allocated: {data['sick_leave_allocated']}, "
+                                f"CL_used: {data['casual_leave_used']}, "
+                                f"SL_used: {data['sick_leave_used']}, "
+                                f"CF: {data['carry_forward_leave']}"
+                            )
+
                             # Update based on mode
-                            if update_mode == 'REPLACE':
-                                leave_balance.casual_leave_allocated = data['casual_leave_allocated']
-                                leave_balance.sick_leave_allocated = data['sick_leave_allocated']
-                                leave_balance.casual_leave_used = data['casual_leave_used']
-                                leave_balance.sick_leave_used = data['sick_leave_used']
-                                leave_balance.carry_forward_leave = data['carry_forward_leave']
-                            
-                            elif update_mode == 'ADD':
-                                leave_balance.casual_leave_allocated += data['casual_leave_allocated']
-                                leave_balance.sick_leave_allocated += data['sick_leave_allocated']
-                                leave_balance.casual_leave_used += data['casual_leave_used']
-                                leave_balance.sick_leave_used += data['sick_leave_used']
-                                leave_balance.carry_forward_leave += data['carry_forward_leave']
-                            
-                            elif update_mode == 'UPDATE_ONLY':
+                            if update_mode == "REPLACE":
+                                leave_balance.casual_leave_allocated = data["casual_leave_allocated"]
+                                leave_balance.sick_leave_allocated = data["sick_leave_allocated"]
+                                leave_balance.casual_leave_used = data["casual_leave_used"]
+                                leave_balance.sick_leave_used = data["sick_leave_used"]
+                                leave_balance.carry_forward_leave = data["carry_forward_leave"]
+
+                            elif update_mode == "ADD":
+                                leave_balance.casual_leave_allocated += data["casual_leave_allocated"]
+                                leave_balance.sick_leave_allocated += data["sick_leave_allocated"]
+                                leave_balance.casual_leave_used += data["casual_leave_used"]
+                                leave_balance.sick_leave_used += data["sick_leave_used"]
+                                leave_balance.carry_forward_leave += data["carry_forward_leave"]
+
+                            elif update_mode == "UPDATE_ONLY":
                                 # Only update non-zero values
-                                if data['casual_leave_allocated'] > 0:
-                                    leave_balance.casual_leave_allocated = data['casual_leave_allocated']
-                                if data['sick_leave_allocated'] > 0:
-                                    leave_balance.sick_leave_allocated = data['sick_leave_allocated']
-                                if data['casual_leave_used'] > 0:
-                                    leave_balance.casual_leave_used = data['casual_leave_used']
-                                if data['sick_leave_used'] > 0:
-                                    leave_balance.sick_leave_used = data['sick_leave_used']
-                                if data['carry_forward_leave'] > 0:
-                                    leave_balance.carry_forward_leave = data['carry_forward_leave']
-                            
+                                if data["casual_leave_allocated"] > 0:
+                                    leave_balance.casual_leave_allocated = data["casual_leave_allocated"]
+                                if data["sick_leave_allocated"] > 0:
+                                    leave_balance.sick_leave_allocated = data["sick_leave_allocated"]
+                                if data["casual_leave_used"] > 0:
+                                    leave_balance.casual_leave_used = data["casual_leave_used"]
+                                if data["sick_leave_used"] > 0:
+                                    leave_balance.sick_leave_used = data["sick_leave_used"]
+                                if data["carry_forward_leave"] > 0:
+                                    leave_balance.carry_forward_leave = data["carry_forward_leave"]
+
                             # Log the values before saving
-                            logger.info(f"Before save - {employee.user.get_full_name()}: "
-                                      f"CL: {leave_balance.casual_leave_allocated}/{leave_balance.casual_leave_used}, "
-                                      f"SL: {leave_balance.sick_leave_allocated}/{leave_balance.sick_leave_used}, "
-                                      f"CF: {leave_balance.carry_forward_leave}")
-                            
+                            logger.info(
+                                f"Before save - {employee.user.get_full_name()}: "
+                                f"CL: {leave_balance.casual_leave_allocated}/{leave_balance.casual_leave_used}, "
+                                f"SL: {leave_balance.sick_leave_allocated}/{leave_balance.sick_leave_used}, "
+                                f"CF: {leave_balance.carry_forward_leave}"
+                            )
+
                             # Save the updated leave balance with validation
                             leave_balance.validate_and_save()
-                            
+
                             # Force refresh from database to ensure consistency
                             leave_balance.refresh_from_db()
-                            
+
                             # Log the values after saving and refresh
-                            logger.info(f"After save - {employee.user.get_full_name()}: "
-                                      f"CL: {leave_balance.casual_leave_allocated}/{leave_balance.casual_leave_used}, "
-                                      f"SL: {leave_balance.sick_leave_allocated}/{leave_balance.sick_leave_used}, "
-                                      f"CF: {leave_balance.carry_forward_leave}")
-                            
+                            logger.info(
+                                f"After save - {employee.user.get_full_name()}: "
+                                f"CL: {leave_balance.casual_leave_allocated}/{leave_balance.casual_leave_used}, "
+                                f"SL: {leave_balance.sick_leave_allocated}/{leave_balance.sick_leave_used}, "
+                                f"CF: {leave_balance.carry_forward_leave}"
+                            )
+
                             # Clear any cached data related to this employee
                             from django.core.cache import cache
+
                             cache_keys_to_clear = [
                                 f"employee_leave_balance_{employee.id}",
                                 f"employee_dashboard_data_{employee.id}",
@@ -3641,39 +3650,50 @@ def bulk_leave_upload(request):
                             ]
                             for cache_key in cache_keys_to_clear:
                                 cache.delete(cache_key)
-                            
+
                             # Trigger any related model updates
                             # This ensures that any dependent calculations are updated
-                            employee.save(update_fields=['updated_at'])
-                            
+                            employee.save(update_fields=["updated_at"])
+
                             # Log the change for audit trail
-                            logger.info(f"Bulk upload: Updated leave balance for {employee.user.get_full_name()} - "
-                                      f"CL: {leave_balance.casual_leave_allocated}/{leave_balance.casual_leave_used}, "
-                                      f"SL: {leave_balance.sick_leave_allocated}/{leave_balance.sick_leave_used}, "
-                                      f"CF: {leave_balance.carry_forward_leave}")
-                            
+                            logger.info(
+                                f"Bulk upload: Updated leave balance for {employee.user.get_full_name()} - "
+                                f"CL: {leave_balance.casual_leave_allocated}/{leave_balance.casual_leave_used}, "
+                                f"SL: {leave_balance.sick_leave_allocated}/{leave_balance.sick_leave_used}, "
+                                f"CF: {leave_balance.carry_forward_leave}"
+                            )
+
                             success_count += 1
-                            
+
                         except Exception as e:
                             error_count += 1
                             logger.error(f"Error updating leave balance for {data['employee_name']}: {str(e)}")
-                
+
                 # Show results with detailed feedback
                 if success_count > 0:
-                    messages.success(request, f"Successfully updated leave balances for {success_count} employees. "
-                                            f"All changes are now reflected across the system.")
+                    messages.success(
+                        request,
+                        f"Successfully updated leave balances for {success_count} employees. "
+                        f"All changes are now reflected across the system.",
+                    )
                     # Add detailed success message for debugging
-                    messages.info(request, f"Updated employees: {', '.join([data['employee_name'] for data in processed_data[:5]])}"
-                                         f"{'...' if len(processed_data) > 5 else ''}")
-                
+                    messages.info(
+                        request,
+                        f"Updated employees: {', '.join([data['employee_name'] for data in processed_data[:5]])}"
+                        f"{'...' if len(processed_data) > 5 else ''}",
+                    )
+
                 if error_count > 0:
-                    messages.warning(request, f"Failed to update {error_count} employee records. Check logs for details.")
-                
+                    messages.warning(
+                        request, f"Failed to update {error_count} employee records. Check logs for details."
+                    )
+
                 # Clear company-wide cache to ensure immediate reflection
                 from django.core.cache import cache
+
                 cache.delete(f"leave_config_data_{user.company.id}")
                 cache.delete(f"company_leave_summary_{user.company.id}")
-                
+
                 # Force clear all employee-related cache for this company
                 company_employees = Employee.objects.filter(company=user.company)
                 for emp in company_employees:
@@ -3681,23 +3701,23 @@ def bulk_leave_upload(request):
                     cache.delete(f"employee_dashboard_data_{emp.id}")
                     cache.delete(f"employee_profile_data_{emp.id}")
                     cache.delete(f"employee_personal_home_{emp.id}")
-                
+
                 # Add a flag to indicate successful bulk upload for frontend handling
                 messages.info(request, "BULK_UPLOAD_SUCCESS")  # Special flag for frontend
-                
-                return redirect('leave_configuration')
-                
+
+                return redirect("leave_configuration")
+
             except Exception as e:
                 messages.error(request, f"Error processing file: {str(e)}")
                 logger.error(f"Bulk leave upload error: {str(e)}")
-        
+
         else:
             messages.error(request, "Please correct the errors below.")
-    
+
     else:
         form = BulkLeaveUploadForm()
-    
-    return render(request, 'employees/bulk_leave_upload.html', {'form': form})
+
+    return render(request, "employees/bulk_leave_upload.html", {"form": form})
 
 
 @login_required
@@ -3705,54 +3725,54 @@ def download_leave_template(request):
     """Download Excel template for bulk leave upload"""
     from django.contrib import messages
     from django.http import HttpResponse
-    
+
     user = request.user
     if user.role not in [User.Role.COMPANY_ADMIN]:
         messages.error(request, "Permission Denied")
         return redirect("leave_configuration")
-    
+
     try:
         import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.styles import Alignment, Font, PatternFill
     except ImportError:
         messages.error(request, "Excel template generation is not available. Please install openpyxl package.")
         return redirect("leave_configuration")
-    
+
     # Create workbook and worksheet
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Leave Balance Template"
-    
+
     # Define headers
     headers = [
-        'employee_id',
-        'employee_name', 
-        'casual_leave_allocated',
-        'sick_leave_allocated',
-        'casual_leave_used',
-        'sick_leave_used',
-        'carry_forward_leave'
+        "employee_id",
+        "employee_name",
+        "casual_leave_allocated",
+        "sick_leave_allocated",
+        "casual_leave_used",
+        "sick_leave_used",
+        "carry_forward_leave",
     ]
-    
+
     # Style for headers
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
     header_alignment = Alignment(horizontal="center", vertical="center")
-    
+
     # Add headers
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = header_alignment
-    
+
     # Add sample data with company employees
-    employees = Employee.objects.filter(company=user.company).select_related('user', 'leave_balance')[:5]
-    
+    employees = Employee.objects.filter(company=user.company).select_related("user", "leave_balance")[:5]
+
     for row, employee in enumerate(employees, 2):
         ws.cell(row=row, column=1, value=employee.badge_id or f"EMP{employee.id:03d}")
         ws.cell(row=row, column=2, value=employee.user.get_full_name())
-        
+
         # Get current leave balance or defaults
         try:
             balance = employee.leave_balance
@@ -3765,10 +3785,10 @@ def download_leave_template(request):
             # Default values for new employees
             ws.cell(row=row, column=3, value=12.0)  # Default CL
             ws.cell(row=row, column=4, value=12.0)  # Default SL
-            ws.cell(row=row, column=5, value=0.0)   # Used CL
-            ws.cell(row=row, column=6, value=0.0)   # Used SL
-            ws.cell(row=row, column=7, value=0.0)   # Carry forward
-    
+            ws.cell(row=row, column=5, value=0.0)  # Used CL
+            ws.cell(row=row, column=6, value=0.0)  # Used SL
+            ws.cell(row=row, column=7, value=0.0)  # Carry forward
+
     # Add instructions sheet
     instructions_ws = wb.create_sheet("Instructions")
     instructions = [
@@ -3782,7 +3802,7 @@ def download_leave_template(request):
         "",
         "Optional Columns:",
         "- casual_leave_used: Casual leaves already used (default: 0)",
-        "- sick_leave_used: Sick leaves already used (default: 0)", 
+        "- sick_leave_used: Sick leaves already used (default: 0)",
         "- carry_forward_leave: Leaves carried forward from previous year (default: 0)",
         "",
         "Important Notes:",
@@ -3795,16 +3815,16 @@ def download_leave_template(request):
         "Update Modes:",
         "- REPLACE: Completely replace existing leave balances",
         "- ADD: Add values to existing balances",
-        "- UPDATE_ONLY: Update only non-zero values in the file"
+        "- UPDATE_ONLY: Update only non-zero values in the file",
     ]
-    
+
     for row, instruction in enumerate(instructions, 1):
         cell = instructions_ws.cell(row=row, column=1, value=instruction)
         if row == 1:  # Title
             cell.font = Font(bold=True, size=14)
         elif instruction.endswith(":"):  # Section headers
             cell.font = Font(bold=True)
-    
+
     # Adjust column widths
     for ws_sheet in [ws, instructions_ws]:
         for column in ws_sheet.columns:
@@ -3818,13 +3838,13 @@ def download_leave_template(request):
                     pass
             adjusted_width = min(max_length + 2, 50)
             ws_sheet.column_dimensions[column_letter].width = adjusted_width
-    
+
     # Create response
-    response = HttpResponse(
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = (
+        f'attachment; filename="leave_balance_template_{user.company.name.replace(" ", "_")}.xlsx"'
     )
-    response['Content-Disposition'] = f'attachment; filename="leave_balance_template_{user.company.name.replace(" ", "_")}.xlsx"'
-    
+
     wb.save(response)
     return response
 
@@ -4286,6 +4306,7 @@ def get_employee_location_history(request, employee_id):
         logger.error(f"Location history error: {str(e)}", exc_info=True)
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
+
 @login_required
 def employee_id_card(request):
     """
@@ -4293,16 +4314,19 @@ def employee_id_card(request):
     """
     try:
         from django.shortcuts import redirect
+
         if hasattr(request.user, "employee_profile"):
-             employee = request.user.employee_profile
+            employee = request.user.employee_profile
         else:
-             from django.contrib import messages
-             messages.error(request, "Employee profile not found.")
-             return redirect("dashboard")
-             
+            from django.contrib import messages
+
+            messages.error(request, "Employee profile not found.")
+            return redirect("dashboard")
+
     except Exception:
         from django.contrib import messages
         from django.shortcuts import redirect
+
         messages.error(request, "Employee profile not found.")
         return redirect("dashboard")
 
