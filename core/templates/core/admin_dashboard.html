@@ -58,7 +58,8 @@
     .employee-search-container {
         margin-top: 20px;
         margin-bottom: 16px;
-        max-width: 600px;
+        max-width: 900px;
+        width: 100%;
     }
 
     .search-wrapper {
@@ -87,6 +88,7 @@
         color: var(--keka-text-primary);
         transition: all 0.3s ease;
         font-family: 'Inter', sans-serif;
+        min-width: 800px;
     }
 
     .employee-search-input:focus {
@@ -109,10 +111,13 @@
         border: 1px solid var(--keka-border);
         border-radius: 12px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-        max-height: 400px;
+        max-height: 600px;
         overflow-y: auto;
         z-index: 1000;
         animation: slideDown 0.2s ease-out;
+        min-width: 800px;
+        width: 100%;
+        max-width: 900px;
     }
 
     @keyframes slideDown {
@@ -128,13 +133,15 @@
     }
 
     .search-result-item {
-        padding: 14px 18px;
+        padding: 24px 30px;
         border-bottom: 1px solid var(--keka-border);
         cursor: pointer;
         transition: all 0.2s ease;
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 20px;
+        min-height: 90px;
+        width: 100%;
     }
 
     .search-result-item:last-child {
@@ -143,12 +150,12 @@
 
     .search-result-item:hover {
         background: linear-gradient(90deg, rgba(91, 71, 251, 0.05) 0%, rgba(91, 71, 251, 0.02) 100%);
-        padding-left: 22px;
+        padding-left: 28px;
     }
 
     .search-result-avatar {
-        width: 42px;
-        height: 42px;
+        width: 52px;
+        height: 52px;
         border-radius: 50%;
         background: linear-gradient(135deg, var(--keka-primary), var(--keka-purple));
         color: white;
@@ -156,28 +163,34 @@
         align-items: center;
         justify-content: center;
         font-weight: 700;
-        font-size: 16px;
+        font-size: 20px;
         flex-shrink: 0;
     }
 
     .search-result-details {
         flex: 1;
         min-width: 0;
+        width: 100%;
+        max-width: none;
     }
 
     .search-result-name {
         font-weight: 600;
-        font-size: 15px;
+        font-size: 17px;
         color: var(--keka-text-primary);
-        margin-bottom: 4px;
+        margin-bottom: 8px;
+        line-height: 1.3;
     }
 
     .search-result-meta {
-        font-size: 13px;
+        font-size: 15px;
         color: var(--keka-text-secondary);
         display: flex;
-        gap: 12px;
+        gap: 20px;
         flex-wrap: wrap;
+        line-height: 1.6;
+        width: 100%;
+    }
     }
 
     .search-result-meta span {
@@ -187,24 +200,24 @@
     }
 
     .search-result-meta i {
-        font-size: 11px;
+        font-size: 13px;
         opacity: 0.7;
     }
 
     .search-no-results {
-        padding: 32px 20px;
+        padding: 50px 30px;
         text-align: center;
         color: var(--keka-text-secondary);
     }
 
     .search-no-results i {
-        font-size: 32px;
-        margin-bottom: 12px;
+        font-size: 40px;
+        margin-bottom: 20px;
         opacity: 0.3;
     }
 
     .search-loading {
-        padding: 20px;
+        padding: 35px;
         text-align: center;
         color: var(--keka-text-secondary);
     }
@@ -558,16 +571,21 @@
         transform: scale(1.1);
     }
 
-    .day-cell.wfh,
     .day-cell.present {
+        background: var(--keka-success);
+        color: white;
+    }
+
+    .day-cell.wfh {
         background: transparent;
         color: var(--keka-text-primary);
         border: 1px solid #e5e7eb;
     }
 
     .day-cell.weekly-off {
-        background: var(--keka-warning);
-        color: white;
+        background: transparent;
+        color: var(--keka-text-secondary);
+        border: 1px solid #e5e7eb;
     }
 
     .day-cell.paid-leave,
@@ -578,8 +596,8 @@
     }
 
     .day-cell.no-attendance {
-        background: #7c3aed;
-        /* Purple for LOP */
+        background: var(--keka-warning);
+        /* Orange for LOP */
         color: white;
     }
 
@@ -1619,6 +1637,17 @@
 
 {% block content %}
 <div class="container-fluid px-4 pb-4">
+    
+    <!-- Employee Search Bar -->
+    <div class="employee-search-container">
+        <div class="search-wrapper">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="employeeSearchInput" class="employee-search-input" 
+                   placeholder="Search employees by name, ID, department..." autocomplete="off">
+            <div id="searchResults" class="search-results" style="display: none;"></div>
+        </div>
+    </div>
+
     <!-- Row 1: Today's Insights & Announcements -->
     <div class="row mb-4">
         <!-- Today's Insights (Vertical Stack) -->
@@ -2016,11 +2045,11 @@
         <!-- Legend -->
         <div class="legend">
             <div class="legend-item">
-                <div class="legend-dot" style="background: transparent; border: 1px solid #e5e7eb;"></div>
+                <div class="legend-dot" style="background: var(--keka-success);"></div>
                 <span>Present</span>
             </div>
             <div class="legend-item">
-                <div class="legend-dot" style="background: var(--keka-warning);"></div>
+                <div class="legend-dot" style="background: transparent; border: 1px solid #e5e7eb;"></div>
                 <span>Weekly off</span>
             </div>
             <div class="legend-item">
@@ -2028,7 +2057,7 @@
                 <span>Leave</span>
             </div>
             <div class="legend-item">
-                <div class="legend-dot" style="background: #7c3aed;"></div>
+                <div class="legend-dot" style="background: var(--keka-warning);"></div>
                 <span>LOP</span>
             </div>
             <div class="legend-item">
