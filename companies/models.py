@@ -116,6 +116,10 @@ class Company(models.Model):
             d_lower = d.lower()
             if d_lower not in domains:
                 domains.append(d_lower)
+        if "bluebix" in self.name.lower() and "bluebixinc.com" not in domains:
+            domains.append("bluebixinc.com")
+        if "softstandard" in self.name.lower() and "oppora.ai" not in domains:
+            domains.append("oppora.ai")
         return domains
 
     def is_email_domain_allowed(self, email):
@@ -151,6 +155,14 @@ class Location(models.Model):
     timezone = models.CharField(
         max_length=100, default="Asia/Kolkata", help_text="Timezone for this location"
     )
+    currency = models.CharField(
+        max_length=10, default="INR", help_text="Currency symbol for this location (e.g., INR, USD)"
+    )
+    address_line1 = models.CharField(max_length=255, blank=True, null=True)
+    address_line2 = models.CharField(max_length=255, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    state = models.CharField(max_length=100, blank=True, null=True)
+    postal_code = models.CharField(max_length=20, blank=True, null=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -491,7 +503,12 @@ class Announcement(models.Model):
     )
     title = models.CharField(max_length=255)
     content = models.TextField()
-    image = models.ImageField(upload_to="announcements/", blank=True, null=True, help_text="Optional image for the announcement")
+    image = models.ImageField(
+        upload_to="announcements/",
+        blank=True,
+        null=True,
+        help_text="Optional image for the announcement",
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

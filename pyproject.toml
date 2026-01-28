@@ -3,7 +3,7 @@ name = "hrms-pbs"
 version = "1.0.0"
 description = "HRMS PBS - Human Resource Management System"
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12"
 dependencies = [
     # Core Django and Web Framework
     "django>=4.2.0,<5.0",
@@ -41,6 +41,9 @@ dependencies = [
     "timezonefinder>=8.2.1",
     "posthog>=7.5.1",
     "loguru>=0.7.3",
+    "openai>=1.0.0",
+    "xhtml2pdf>=0.2.16",
+    "reportlab>=4.3.1",
 ]
 
 [project.optional-dependencies]
@@ -68,4 +71,53 @@ dev = [
     "coverage>=7.11.0",
     "black>=24.10.0",
     "flake8>=7.1.0",
+    "pre-commit>=4.0.0",
+    "ruff>=0.8.0",
 ]
+
+[tool.ruff]
+# Ruff configuration for linting and formatting
+line-length = 120
+target-version = "py312"
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "*/migrations/*",
+    "staticfiles",
+    "media",
+    "_logs",
+    ".ruff_cache",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "B904",  # raise from
+    "ARG001", # unused function argument
+    "ARG002", # unused method argument
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # unused imports in __init__.py
+"*/tests/*.py" = ["ARG001", "ARG002"]  # unused arguments in tests
+"*/migrations/*.py" = ["E501"]  # long lines in migrations
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

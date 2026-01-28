@@ -5,206 +5,603 @@
 
 {% block extra_css %}
 <style>
-    /* Keka-style Finance Dashboard */
+    /* Finance Dashboard Premium Design */
+    :root {
+        --finance-primary: #6366f1;
+        --finance-secondary: #4f46e5;
+        --finance-glass: rgba(255, 255, 255, 0.7);
+        --finance-card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+        --finance-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    }
 
+    .finance-container {
+        padding: 1.5rem;
+        max-width: 1400px;
+        margin: 0 auto;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Header Section */
     .finance-header-section {
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 3rem;
-        flex-wrap: wrap;
+        align-items: center;
+        margin-bottom: 2rem;
         gap: 2rem;
+        flex-wrap: wrap;
+    }
+
+    .page-info {
+        flex: 1;
+        min-width: 300px;
     }
 
     .page-title {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: #2d3748;
+        font-size: 1.85rem;
+        font-weight: 800;
+        color: #1e293b;
         margin-bottom: 0.5rem;
+        letter-spacing: -0.025em;
     }
 
     .page-subtitle {
-        color: #a0aec0;
-        font-size: 0.9rem;
+        color: #64748b;
+        font-size: 1rem;
+        margin: 0;
     }
 
-    /* Financial Info Card */
+    /* Financial Info Card - Premium Glassmorphism */
     .financial-card {
-        background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-        border-radius: 12px;
-        padding: 1.5rem 2rem;
+        background: var(--finance-gradient);
+        border-radius: 20px;
+        padding: 1.75rem;
         color: white;
-        min-width: 350px;
-        box-shadow: 0 4px 6px rgba(49, 130, 206, 0.2);
+        min-width: 380px;
+        box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.3);
+        position: relative;
+        overflow: hidden;
+        flex: 0 1 auto;
+    }
+
+    .financial-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+        transform: rotate(45deg);
     }
 
     .fin-card-title {
-        font-size: 0.75rem;
+        font-size: 0.85rem;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.1em;
         opacity: 0.9;
         margin-bottom: 1.5rem;
-        font-weight: 600;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
     }
 
     .fin-card-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1.5rem;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.25rem;
+    }
+
+    .fin-item {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 0.75rem 1rem;
+        border-radius: 12px;
+        backdrop-filter: blur(4px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: transform 0.2s ease;
+    }
+
+    .fin-item:hover {
+        transform: translateY(-2px);
+        background: rgba(255, 255, 255, 0.15);
     }
 
     .fin-label {
-        font-size: 0.7rem;
+        font-size: 0.65rem;
         text-transform: uppercase;
         opacity: 0.8;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.25rem;
         font-weight: 600;
+        display: block;
     }
 
     .fin-value {
-        font-size: 1.1rem;
+        font-size: 1.05rem;
         font-weight: 700;
-        background: rgba(255, 255, 255, 0.1);
-        padding: 0.5rem 0.75rem;
-        border-radius: 6px;
-        display: inline-block;
-        min-width: 100px;
+        word-break: break-word;
     }
 
-    /* History Section */
-    .history-title {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #2d3748;
-        margin-bottom: 1rem;
-    }
-
-    /* Empty State */
-    .empty-state-box {
-        background-color: #f7fafc;
-        border: 2px dashed #cbd5e0;
-        border-radius: 8px;
-        padding: 4rem 2rem;
-        text-align: center;
+    /* Payslip List Section */
+    .history-section {
         margin-top: 1rem;
     }
 
-    .empty-state-msg {
-        color: #4a5568;
-        font-weight: 600;
-        font-size: 1rem;
-        margin-bottom: 0.5rem;
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
     }
 
-    .empty-state-sub {
-        color: #a0aec0;
-        font-size: 0.85rem;
+    .history-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 0;
     }
 
-    /* Table if data exists */
+    /* Responsive Table Styles */
+    .payslips-table-container {
+        background: white;
+        border-radius: 16px;
+        box-shadow: var(--finance-card-shadow);
+        border: 1px solid #f1f5f9;
+        overflow: hidden;
+    }
+
+    .table-payslips {
+        margin: 0;
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
     .table-payslips th {
-        background-color: #f7fafc;
-        color: #718096;
+        background-color: #f8fafc;
+        color: #64748b;
         font-size: 0.75rem;
         text-transform: uppercase;
-        padding: 1rem;
-        border-bottom: 1px solid #edf2f7;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #f1f5f9;
+        font-weight: 700;
+        letter-spacing: 0.05em;
     }
 
     .table-payslips td {
-        padding: 1rem;
-        border-bottom: 1px solid #edf2f7;
-        color: #4a5568;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #f1f5f9;
+        color: #334155;
         vertical-align: middle;
+        font-size: 0.95rem;
+    }
+
+    .table-payslips tr:last-child td {
+        border-bottom: none;
+    }
+
+    .table-payslips tr:hover td {
+        background-color: #fcfdfe;
+    }
+
+    .period-cell {
+        font-weight: 700;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .period-icon {
+        width: 32px;
+        height: 32px;
+        background: #eef2ff;
+        color: #6366f1;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+    }
+
+    .salary-badge {
+        background: #f0fdf4;
+        color: #166534;
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        border: 1px solid #dcfce7;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
     }
 
     .btn-download {
-        color: #3182ce;
-        background-color: #ebf8ff;
-        padding: 6px 12px;
-        border-radius: 4px;
+        background: white;
+        color: #6366f1;
+        padding: 0.6rem 1.25rem;
+        border-radius: 10px;
         font-size: 0.85rem;
         text-decoration: none;
-        font-weight: 500;
-        transition: all 0.2s;
+        font-weight: 600;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        border: 1.5px solid #e2e8f0;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     }
 
     .btn-download:hover {
-        background-color: #bee3f8;
-        color: #2b6cb0;
+        background: #6366f1;
+        color: white;
+        border-color: #6366f1;
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.2);
+    }
+
+    /* Mobile Views (Cards) */
+    .mobile-payslips-layout {
+        display: none;
+    }
+
+    /* Media Queries */
+    @media (max-width: 991px) {
+        .finance-header-section {
+            gap: 1.5rem;
+        }
+
+        .financial-card {
+            min-width: 100%;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .finance-container {
+            padding: 1rem;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+        }
+
+        .page-subtitle {
+            font-size: 0.9rem;
+        }
+
+        /* Hide table, show cards */
+        .desktop-payslips-layout {
+            display: none;
+        }
+
+        .mobile-payslips-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+
+        .payslip-card {
+            background: white;
+            border-radius: 16px;
+            padding: 1.25rem;
+            box-shadow: var(--finance-card-shadow);
+            border: 1px solid #f1f5f9;
+            transition: transform 0.2s ease;
+        }
+
+        .payslip-card:active {
+            transform: scale(0.98);
+        }
+
+        .payslip-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .payslip-period {
+            font-weight: 800;
+            color: #1e293b;
+            font-size: 1.1rem;
+        }
+
+        .payslip-card-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .payslip-info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .info-label {
+            font-size: 0.7rem;
+            color: #94a3b8;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .info-value {
+            font-size: 0.9rem;
+            color: #334155;
+            font-weight: 700;
+        }
+
+        .btn-download-mobile {
+            width: 100%;
+            justify-content: center;
+            padding: 0.85rem;
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            color: #6366f1;
+        }
+
+        .btn-download-mobile:hover,
+        .btn-download-mobile:active {
+            background: #6366f1;
+            color: white;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .fin-card-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .payslip-card-body {
+            grid-template-columns: 1fr;
+        }
+
+        .page-title {
+            font-size: 1.25rem;
+        }
+    }
+
+    /* Empty State */
+    .empty-state-card {
+        background: white;
+        border-radius: 20px;
+        padding: 4rem 2rem;
+        text-align: center;
+        box-shadow: var(--finance-card-shadow);
+        border: 2px dashed #e2e8f0;
+    }
+
+    .empty-icon-wrapper {
+        width: 80px;
+        height: 80px;
+        background: #f8fafc;
+        color: #cbd5e0;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        margin: 0 auto 1.5rem;
+    }
+
+    .empty-state-card h3 {
+        color: #1e293b;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state-card p {
+        color: #94a3b8;
+        max-width: 300px;
+        margin: 0 auto;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-
-    <!-- Header & Fin Card -->
+<div class="finance-container">
+    <!-- Header & Financial Card -->
     <div class="finance-header-section">
-        <div>
+        <div class="page-info">
             <h1 class="page-title">My Payslips</h1>
             <p class="page-subtitle">View and download your monthly salary slips and financial information</p>
         </div>
 
         <div class="financial-card">
-            <div class="fin-card-title">Financial Information</div>
+            <div class="fin-card-title">
+                <i class="fas fa-wallet"></i> Financial Information
+            </div>
             <div class="fin-card-grid">
-                <div>
-                    <div class="fin-label">UAN Number</div>
-                    <div class="fin-value">{{ employee.uan|default:"Not Set" }}</div>
+                <div class="fin-item">
+                    <span class="fin-label">UAN Number</span>
+                    <span class="fin-value">{{ employee.uan|default:"Not Set" }}</span>
                 </div>
-                <div>
-                    <div class="fin-label">Annual CTC</div>
-                    <div class="fin-value">{{ employee.annual_ctc|default:"Not Set" }}</div>
+                <div class="fin-item">
+                    <span class="fin-label">Annual CTC</span>
+                    <span class="fin-value">
+                        {% with curr=employee.location.currency|default:employee.company.currency|default:"INR" %}
+                        {% if curr == "USD" %}${% elif curr == "BDT" %}৳{% else %}₹{% endif %}{{ employee.annual_ctc|default:"0" }}
+                        {% endwith %}
+                    </span>
+                </div>
+                <div class="fin-item">
+                    <span class="fin-label">Work Location</span>
+                    <span class="fin-value">{{ employee.location.name|default:"Not Set" }}</span>
+                </div>
+                <div class="fin-item">
+                    <span class="fin-label">Currency</span>
+                    <span class="fin-value">
+                        {% if employee.location and employee.location.currency %}
+                        {{ employee.location.currency }}
+                        {% else %}
+                        {{ employee.company.currency|default:"INR" }}
+                        {% endif %}
+                    </span>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- History -->
-    <div>
-        <h5 class="history-title">Payslip History</h5>
+    <!-- Payslip History -->
+    <div class="history-section">
+        <div class="section-header">
+            <h5 class="history-title">Payslip History</h5>
+        </div>
 
         {% if payslips %}
-        <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
-            <div class="table-responsive">
-                <table class="table table-payslips mb-0">
-                    <thead>
-                        <tr>
-                            <th>Period</th>
-                            <th>Generated On</th>
-                            <th>Net Salary</th>
-                            <th class="text-end">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for slip in payslips %}
-                        <tr>
-                            <td class="fw-bold text-dark">{{ slip.month|date:"F Y" }}</td>
-                            <td>{{ slip.generated_at|date:"M d, Y" }}</td>
-                            <td>Make sure to secure this info</td>
-                            <td class="text-end">
-                                {% if slip.pdf_file %}
-                                <a href="{{ slip.pdf_file.url }}" class="btn-download" target="_blank">
-                                    <i class="fas fa-download me-2"></i> Download
-                                </a>
-                                {% else %}
-                                <span class="text-muted small">Processing...</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        <!-- Desktop Table Layout -->
+        <div class="desktop-payslips-layout">
+            <div class="payslips-table-container">
+                <div class="table-responsive">
+                    <table class="table table-payslips">
+                        <thead>
+                            <tr>
+                                <th>Period</th>
+                                <th>Generated On</th>
+                                <th>Net Salary</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for slip in payslips %}
+                            <tr>
+                                <td>
+                                    <div class="period-cell">
+                                        <div class="period-icon">
+                                            <i class="fas fa-calendar-alt"></i>
+                                        </div>
+                                        <span>{{ slip.month|date:"F Y" }}</span>
+                                    </div>
+                                </td>
+                                <td class="text-muted">{{ slip.generated_at|date:"M d, Y" }}</td>
+                                <td>
+                                    <div class="salary-badge">
+                                        <i class="fas fa-check-circle"></i>
+                                        {% with curr=slip.employee.location.currency|default:slip.employee.company.currency|default:"INR" %}
+                                        {% if curr == "USD" %}${% elif curr == "BDT" %}৳{% else %}₹{% endif %}{{ slip.net_salary }}
+                                        {% endwith %}
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    {% if slip.pdf_file %}
+                                    <a href="{{ slip.pdf_file.url }}" class="btn-download" target="_blank">
+                                        <i class="fas fa-cloud-download-alt"></i> Download
+                                    </a>
+                                    {% else %}
+                                    <span class="badge bg-light text-muted p-2">
+                                        <i class="fas fa-spinner fa-spin me-1"></i> Processing
+                                    </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
+
+        <!-- Mobile Card Layout -->
+        <div class="mobile-payslips-layout">
+            {% for slip in payslips %}
+            <div class="payslip-card">
+                <div class="payslip-card-header">
+                    <div class="payslip-period">{{ slip.month|date:"F Y" }}</div>
+                    {% if not slip.pdf_file %}
+                    <span class="badge bg-light text-muted">Processing</span>
+                    {% endif %}
+                </div>
+
+                <div class="payslip-card-body">
+                    <div class="payslip-info-item">
+                        <span class="info-label">Generated On</span>
+                        <span class="info-value">{{ slip.generated_at|date:"M d, Y" }}</span>
+                    </div>
+
+                    <div class="payslip-info-item">
+                        <span class="info-label">Net Salary</span>
+                        <span class="info-value">
+                            {% with curr=slip.employee.location.currency|default:slip.employee.company.currency|default:"INR" %}
+                            {% if curr == "USD" %}${% elif curr == "BDT" %}৳{% else %}₹{% endif %}{{ slip.net_salary }}
+                            {% endwith %}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="payslip-card-actions">
+                    {% if slip.pdf_file %}
+                    <a href="{{ slip.pdf_file.url }}" class="btn-download btn-download-mobile" target="_blank">
+                        <i class="fas fa-cloud-download-alt"></i> Download PDF
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
         {% else %}
-        <div class="empty-state-box">
-            <div class="empty-state-msg">No Payslips Found</div>
-            <div class="empty-state-sub">Your payslips will appear here once they are uploaded by HR.</div>
+        <!-- Empty State -->
+        <div class="empty-state-card">
+            <div class="empty-icon-wrapper">
+                <i class="fas fa-receipt"></i>
+            </div>
+            <h3>No Payslips Found</h3>
+            <p>Your monthly payslips will be available here once they are generated by the finance team.</p>
         </div>
         {% endif %}
     </div>
-
 </div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Add touch feedback for mobile
+        if ('ontouchstart' in window) {
+            const touchElements = document.querySelectorAll('.btn-download, .payslip-card');
+            touchElements.forEach(element => {
+                element.addEventListener('touchstart', function () {
+                    this.style.transform = 'scale(0.98)';
+                });
+
+                element.addEventListener('touchend', function () {
+                    setTimeout(() => {
+                        this.style.transform = '';
+                    }, 150);
+                });
+            });
+        }
+
+        // Handle download button loading state
+        const downloadButtons = document.querySelectorAll('.btn-download');
+        downloadButtons.forEach(button => {
+            button.addEventListener('click', function () {
+                const icon = this.querySelector('i');
+                if (icon) {
+                    const originalClass = icon.className;
+                    icon.className = 'fas fa-spinner fa-spin';
+
+                    // Reset after 3 seconds to allow for download to start
+                    setTimeout(() => {
+                        icon.className = originalClass;
+                    }, 3000);
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
 {% endblock %}

@@ -49,6 +49,7 @@ def add_employee_step1(request):
                 "first_name": form.cleaned_data["first_name"],
                 "last_name": form.cleaned_data["last_name"],
                 "email": form.cleaned_data["email"],
+                "personal_email": form.cleaned_data.get("personal_email", ""),
                 "mobile_number": form.cleaned_data.get("mobile_number", ""),
                 "gender": form.cleaned_data.get("gender", ""),
                 "marital_status": form.cleaned_data.get("marital_status", ""),
@@ -77,21 +78,67 @@ def add_employee_step1(request):
         initial_data = request.session.get("employee_personal_data", {})
         form = PersonalInfoForm(initial=initial_data, user=request.user)
 
-    # Calculate Company Prefix for ID generation
+    # Calculate Company Prefix and Context
     company_prefix = "EMP"
+    email_placeholder = "e.g. john.doe@gmail.com"
+    next_sequence_placeholder = "001"
+
     if request.user.company:
         c_name = request.user.company.name.lower()
+        company = request.user.company
+
+        # Calculate next sequence based on highest existing badge ID number
+        try:
+            # Get all badge IDs for the company
+            existing_ids = Employee.objects.filter(company=company).values_list(
+                "badge_id", flat=True
+            )
+
+            max_number = 0
+            import re
+
+            for bid in existing_ids:
+                if bid:
+                    # Extract all matches of digits
+                    numbers = re.findall(r"\d+", bid)
+                    if numbers:
+                        # Take the last group of digits as the ID number (usually at the end)
+                        try:
+                            num = int(numbers[-1])
+                            if num > max_number:
+                                max_number = num
+                        except ValueError:
+                            continue
+
+            next_sequence_placeholder = f"{max_number + 1:03d}"
+        except Exception:
+            # Fallback to 001 if any error occurs
+            next_sequence_placeholder = "001"
+
         if "petabytz" in c_name or "petabytes" in c_name:
             company_prefix = "PBT"
+            email_placeholder = "e.g. john.doe@petabytz.com"
         elif "softstandard" in c_name:
             company_prefix = "SSS"
+            email_placeholder = "e.g. john.doe@softstandard.com"
+        elif "bluebix" in c_name:
+            company_prefix = "BBS"
+            email_placeholder = "e.g. john.doe@bluebixinc.com"
         else:
             company_prefix = request.user.company.name[:3].upper()
+            domain = c_name.replace(" ", "") + ".com"
+            email_placeholder = f"e.g. john.doe@{domain}"
 
     return render(
         request,
         "employees/add_employee_step1.html",
-        {"form": form, "step": 1, "company_prefix": company_prefix},
+        {
+            "form": form,
+            "step": 1,
+            "company_prefix": company_prefix,
+            "next_sequence": next_sequence_placeholder,
+            "email_placeholder": email_placeholder,
+        },
     )
 
 
@@ -218,6 +265,7 @@ def add_employee_step3(request):
                 company=company,
                 # Personal
                 mobile_number=personal_data.get("mobile_number"),
+                personal_email=personal_data.get("personal_email"),
                 gender=personal_data.get("gender"),
                 marital_status=personal_data.get("marital_status"),
                 dob=datetime.strptime(personal_data["dob"], "%Y-%m-%d").date()
@@ -245,9 +293,8 @@ def add_employee_step3(request):
                 ifsc_code=finance_data.get("ifsc_code"),
                 uan=finance_data.get("uan"),
                 pf_enabled=finance_data.get("pf_enabled", False),
+                annual_ctc=finance_data.get("annual_ctc"),
             )
-
-
 
             # Create Emergency Contacts
             emergency_contacts = request.session.get("employee_emergency_contacts", [])
@@ -302,6 +349,30 @@ def add_employee_step3(request):
         initial_data = request.session.get("employee_finance_data", {})
         form = FinanceDetailsForm(initial=initial_data)
 
+    # Get location for currency display
+    location = None
+    company = None
+    personal_data = request.session.get("employee_personal_data", {})
+    if personal_data.get("location_id"):
+        from companies.models import Location
+        try:
+            location = Location.objects.get(id=personal_data["location_id"])
+        except Location.DoesNotExist:
+            pass
+    if personal_data.get("company_id"):
+        from companies.models import Company
+        try:
+            company = Company.objects.get(id=personal_data["company_id"])
+        except Company.DoesNotExist:
+            pass
+
     return render(
-        request, "employees/add_employee_step3.html", {"form": form, "step": 3}
+        request, 
+        "employees/add_employee_step3.html", 
+        {
+            "form": form, 
+            "step": 3, 
+            "employee_location": location,
+            "employee_company": company
+        }
     )

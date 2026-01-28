@@ -1,50 +1,40 @@
-from django.shortcuts import render
+import calendar
+import random
+import json
+from datetime import date, datetime, timedelta
+
+import openpyxl
 from django.conf import settings
-
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.utils import timezone
 from loguru import logger
+from openpyxl.styles import Alignment, Font, PatternFill
 
+from accounts.models import User
+from companies.models import Holiday
 from employees.models import (
     Attendance,
     Employee,
+    HandbookSection,
     LeaveBalance,
     LeaveRequest,
     Payslip,
-    HandbookSection,
     PolicySection,
 )
-from companies.models import Holiday
-from django.shortcuts import redirect
-from django.contrib import messages
-from django.utils import timezone
-from django.http import HttpResponse
-from django.db.models import Q
 
-import calendar
-
-import openpyxl
-
-from openpyxl.styles import Font, Alignment, PatternFill
-
-from datetime import datetime, date
-
-from datetime import timedelta
-
-from accounts.models import User
-
-from .decorators import manager_required, admin_required
-
-from .forms import ForgotPasswordForm, OTPVerificationForm, ResetPasswordForm
-
-from .models import PasswordResetOTP
-
+from .decorators import admin_required, manager_required
 from .error_handling import (
     safe_get_employee_profile,
-    safe_queryset_filter,
-    capture_exception,
 )
-
-import random
+from .forms import ForgotPasswordForm, OTPVerificationForm, ResetPasswordForm
+from .models import PasswordResetOTP
+from .utils import save_pdf_to_model
+from employees.payroll_utils import calculate_payslip_breakdown, num2words_indian, num2words_flexible
 
 
 @login_required
@@ -89,8 +79,8 @@ def manager_dashboard(request):
     today = timezone.localtime().date()
 
     # Get direct reports (Team)
-
-    team_members = Employee.objects.filter(manager=request.user)
+    # Filter out exited employees (keep if active or exit date is today/future)
+    team_members = Employee.objects.filter(manager=request.user).filter(Q(is_active=True) | Q(exit_date__gte=today))
 
     team_ids = team_members.values_list("id", flat=True)
 
@@ -100,9 +90,9 @@ def manager_dashboard(request):
 
     # Today's Attendance for Team
 
-    team_attendance = Attendance.objects.filter(
-        employee__in=team_ids, date=today
-    ).select_related("employee", "employee__user")
+    team_attendance = Attendance.objects.filter(employee__in=team_ids, date=today).select_related(
+        "employee", "employee__user"
+    )
 
     present_count = team_attendance.filter(status="PRESENT").count()
 
@@ -143,7 +133,11 @@ def manager_dashboard(request):
     )
 
     # 5. Celebrations
-    company_employees = Employee.objects.filter(company=manager_profile.company)
+    # 5. Celebrations
+    # Filter company employees for celebrations (exclude exited)
+    company_employees = Employee.objects.filter(company=manager_profile.company).filter(
+        Q(is_active=True) | Q(exit_date__gte=today)
+    )
 
     # Birthdays
     birthdays = company_employees.filter(dob__month=today.month, dob__day=today.day)
@@ -158,9 +152,7 @@ def manager_dashboard(request):
     # 6. Upcoming Holidays
 
     upcoming_holidays = (
-        Holiday.objects.filter(
-            company=manager_profile.company, date__gte=today, is_active=True
-        )
+        Holiday.objects.filter(company=manager_profile.company, date__gte=today, is_active=True)
         .filter(
             Q(location__name__iexact="Global")
             | Q(location__name__iexact="All Locations")
@@ -197,10 +189,7 @@ def admin_dashboard(request):
 
     if not hasattr(request.user, "company") or not request.user.company:
         # Check if SuperAdmin is spoofing a company
-        if (
-            request.user.role == User.Role.SUPERADMIN
-            and "active_company_id" in request.session
-        ):
+        if request.user.role == User.Role.SUPERADMIN and "active_company_id" in request.session:
             from companies.models import Company
 
             try:
@@ -212,7 +201,9 @@ def admin_dashboard(request):
         else:
             return render(request, "core/dashboard.html", {"title": "Dashboard"})
 
-    from datetime import time as dt_time, timedelta
+    from datetime import time as dt_time
+    from datetime import timedelta
+
     from companies.models import Holiday, Location
 
     today = timezone.localtime().date()
@@ -226,33 +217,48 @@ def admin_dashboard(request):
     if location_id:
         employees = employees.filter(location_id=location_id)
 
+    # Filter out inactive employees who have exited before today
+    employees = employees.filter(Q(is_active=True) | Q(exit_date__gte=today))
+
     total_employees = employees.count()
 
     # Today's attendance records
-    today_attendance = Attendance.objects.filter(
-        employee__company=company, date=today
-    ).select_related("employee", "employee__user")
+    today_attendance = Attendance.objects.filter(employee__company=company, date=today).select_related(
+        "employee", "employee__user", "employee__location"
+    )
 
     if location_id:
         today_attendance = today_attendance.filter(employee__location_id=location_id)
 
     # Calculate stats
-    late_arrivals = 0
-    early_departures = 0
-    on_duty_count = 0
+    late_arrivals_list = []
+    early_departures_list = []
+    on_duty_list = []
     on_time = 0
     work_from_office = 0
     remote_clockins = 0
 
     # Define office start time (9:00 AM)
     office_start = dt_time(9, 0)
+    
+    import pytz
 
     for att in today_attendance:
+        # Determine employee timezone
+        tz_name = "Asia/Kolkata"
+        if att.employee.location and att.employee.location.timezone:
+            tz_name = att.employee.location.timezone
+        
+        emp_tz = pytz.timezone(tz_name)
+
         if att.clock_in:
-            clock_in_time = timezone.localtime(att.clock_in).time()
+            # Attach local times to the object for template display
+            local_in_dt = att.clock_in.astimezone(emp_tz)
+            att.local_clock_in_time = local_in_dt.time()
+            
             # Late arrivals
             if att.is_late:
-                late_arrivals += 1
+                late_arrivals_list.append(att)
             else:
                 on_time += 1
 
@@ -263,23 +269,28 @@ def admin_dashboard(request):
             # Remote clock-ins
             if att.location_in and att.status == "WFH":
                 remote_clockins += 1
+                
+        if att.clock_out:
+            local_out_dt = att.clock_out.astimezone(emp_tz)
+            att.local_clock_out_time = local_out_dt.time()
 
         # On Duty (Interpreted as Currently Clocked In / Active based on user request)
-        if att.clock_in and not att.clock_out:
-            on_duty_count += 1
-        # Also include explicitly marked ON_DUTY status (e.g. field work) even if no clock-in
-        elif att.status == "ON_DUTY":
-            on_duty_count += 1
+        if (att.clock_in and not att.clock_out) or att.status == "ON_DUTY":
+            on_duty_list.append(att)
 
         # Early Departures
         if att.is_early_departure:
-            early_departures += 1
+            early_departures_list.append(att)
+
+    late_arrivals = len(late_arrivals_list)
+    early_departures = len(early_departures_list)
+    on_duty_count = len(on_duty_list)
 
     # --- Department Performance Logic ---
     # Get distinct departments with improved deduplication
     departments_raw = employees.values_list("department", flat=True).distinct()
     departments_map = {}  # Maps normalized name to original names
-    
+
     # Build mapping of normalized names to original names
     for dept in departments_raw:
         if dept and dept.strip():
@@ -287,16 +298,16 @@ def admin_dashboard(request):
             if normalized not in departments_map:
                 departments_map[normalized] = []
             departments_map[normalized].append(dept)
-    
+
     # Get sorted unique departments (normalized)
     departments_list = sorted(departments_map.keys())
-    
+
     department_performance = []
 
     for normalized_dept in departments_list:
         # Get all original department names that map to this normalized name
         original_dept_names = departments_map[normalized_dept]
-        
+
         # Filter employees by any of the original department names
         dept_emps = employees.filter(department__in=original_dept_names)
         dept_total = dept_emps.count()
@@ -322,9 +333,7 @@ def admin_dashboard(request):
 
     # Pending leave requests
     pending_leave_requests = (
-        LeaveRequest.objects.filter(
-            employee__company=request.user.company, status="PENDING"
-        )
+        LeaveRequest.objects.filter(employee__company=request.user.company, status="PENDING")
         .select_related("employee", "employee__user")
         .order_by("-created_at")[:10]
     )
@@ -366,8 +375,8 @@ def admin_dashboard(request):
     month_start = date(current_year, current_month, 1)
     month_end = date(current_year, current_month, num_days)
 
-    # Get sample employees for calendar view (top 5 for performance)
-    calendar_employees = employees[:20]
+    # Get employees for calendar view (show all active employees)
+    calendar_employees = employees
 
     # Build calendar data for each employee
     employee_calendar_data = []
@@ -375,9 +384,7 @@ def admin_dashboard(request):
         emp_data = {"employee": emp, "days": []}
 
         # Get attendance for the selected month
-        month_attendance = Attendance.objects.filter(
-            employee=emp, date__range=[month_start, month_end]
-        )
+        month_attendance = Attendance.objects.filter(employee=emp, date__range=[month_start, month_end])
 
         att_map = {att.date.day: att for att in month_attendance}
 
@@ -436,9 +443,9 @@ def admin_dashboard(request):
                         company=emp.company,
                         location=emp.location,
                         date=day_date,
-                        is_active=True
+                        is_active=True,
                     ).exists()
-                    
+
                     if is_holiday:
                         status_class = "holiday"
                     # Check if it's a weekly off for this employee
@@ -448,9 +455,7 @@ def admin_dashboard(request):
                         # No record and not holiday/weekoff = absent
                         status_class = "no-attendance"
 
-            emp_data["days"].append(
-                {"day": day, "status": status_class, "date": day_date}
-            )
+            emp_data["days"].append({"day": day, "status": status_class, "date": day_date})
 
         employee_calendar_data.append(emp_data)
 
@@ -515,9 +520,7 @@ def admin_dashboard(request):
                     next_anniv = emp.date_of_joining.replace(year=today.year + 1)
                     years_completed += 1  # It will be next year's anniversary
                 except ValueError:
-                    next_anniv = emp.date_of_joining.replace(
-                        year=today.year + 1, day=28
-                    )
+                    next_anniv = emp.date_of_joining.replace(year=today.year + 1, day=28)
                     years_completed += 1
             else:
                 next_anniv = this_year_anniv
@@ -538,12 +541,9 @@ def admin_dashboard(request):
 
     # 3. Announcements
     from companies.models import Announcement
-    
+
     announcements = (
-        Announcement.objects.filter(
-            company=request.user.company,
-            is_active=True
-        )
+        Announcement.objects.filter(company=request.user.company, is_active=True)
         .select_related("location")
         .order_by("-created_at")[:10]
     )
@@ -570,6 +570,9 @@ def admin_dashboard(request):
         "late_arrivals": late_arrivals,
         "early_departures": early_departures,
         "on_duty_count": on_duty_count,
+        "late_arrivals_list": late_arrivals_list,
+        "early_departures_list": early_departures_list,
+        "on_duty_list": on_duty_list,
         "department_performance": department_performance,
         "on_time": on_time,
         "work_from_office": work_from_office,
@@ -589,9 +592,7 @@ def admin_dashboard(request):
         "num_days": num_days,
         "departments": departments,
         "locations": locations,
-        "location_filter": int(location_id)
-        if location_id and location_id.isdigit()
-        else None,
+        "location_filter": int(location_id) if location_id and location_id.isdigit() else None,
     }
 
     # Check for Admin's own celebration
@@ -615,20 +616,14 @@ def admin_dashboard(request):
             try:
                 anniv_this_year = admin_emp.date_of_joining.replace(year=today.year)
             except ValueError:
-                anniv_this_year = admin_emp.date_of_joining.replace(
-                    year=today.year, day=28
-                )
+                anniv_this_year = admin_emp.date_of_joining.replace(year=today.year, day=28)
 
             if anniv_this_year == today and today.year > admin_emp.date_of_joining.year:
                 celebration_type = "anniversary" if not celebration_type else "both"
 
         if celebration_type:
             context["celebration_type"] = celebration_type
-            context["years_service"] = (
-                today.year - admin_emp.date_of_joining.year
-                if admin_emp.date_of_joining
-                else 0
-            )
+            context["years_service"] = today.year - admin_emp.date_of_joining.year if admin_emp.date_of_joining else 0
 
     except Exception as e:
         logger.debug("Error checking celebration dates for admin dashboard", error=str(e))
@@ -641,32 +636,43 @@ def admin_dashboard(request):
 def search_employees_api(request):
     """API endpoint for searching employees by name"""
     from django.http import JsonResponse
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        query = request.GET.get("q", "").strip()
+        logger.info(f"Search query received: '{query}' from user: {request.user.email}")
 
-    query = request.GET.get("q", "").strip()
+        # Search with just 1 character (like autocomplete)
+        if not query or len(query) < 1:
+            logger.info("Query too short, returning empty results")
+            return JsonResponse({"employees": [], "debug": "Query too short"})
 
-    if not query or len(query) < 2:
-        return JsonResponse({"employees": []})
+        # Get company
+        company = request.user.company
+        logger.info(f"Searching in company: {company.name if company else 'None'}")
 
-    # Get company
-    company = request.user.company
+        if not company:
+            logger.error("User has no company assigned")
+            return JsonResponse({"employees": [], "error": "No company assigned"})
 
-    # Search employees by name (first name or last name)
-    employees = (
-        Employee.objects.filter(company=company)
-        .filter(
-            Q(user__first_name__icontains=query)
-            | Q(user__last_name__icontains=query)
-            | Q(badge_id__icontains=query)
+        # Search employees by name (first name or last name)
+        employees = (
+            Employee.objects.filter(company=company)
+            .filter(
+                Q(user__first_name__icontains=query) | Q(user__last_name__icontains=query) | Q(badge_id__icontains=query)
+            )
+            .select_related("user", "location", "manager")[:10]
         )
-        .select_related("user", "location", "manager")[:10]
-    )
 
-    results = []
-    for emp in employees:
-        results.append(
-            {
+        logger.info(f"Found {employees.count()} employees matching query")
+
+        results = []
+        for emp in employees:
+            result = {
                 "id": emp.id,
-                "name": emp.user.get_full_name(),
+                "name": emp.user.get_full_name() or "No Name",
                 "employee_id": emp.badge_id or f"EMP-{emp.id}",
                 "department": emp.department or "N/A",
                 "location": emp.location.name if emp.location else "N/A",
@@ -675,9 +681,15 @@ def search_employees_api(request):
                 "phone": emp.mobile_number or "N/A",
                 "profile_url": f"/employees/{emp.id}/detail/",
             }
-        )
+            results.append(result)
+            logger.info(f"Added employee: {result['name']}")
 
-    return JsonResponse({"employees": results})
+        logger.info(f"Returning {len(results)} results")
+        return JsonResponse({"employees": results, "count": len(results)})
+        
+    except Exception as e:
+        logger.error(f"Error in search_employees_api: {str(e)}")
+        return JsonResponse({"employees": [], "error": str(e)}, status=500)
 
 
 @login_required
@@ -689,33 +701,102 @@ def employee_dashboard(request):
         return redirect("personal_home")
 
     today = timezone.localtime().date()
+    
+    # Adjust today based on employee location timezone
+    if employee.location and hasattr(employee.location, "timezone"):
+        try:
+            import pytz
+            tz = pytz.timezone(employee.location.timezone)
+            # Use now() to get accurate current moment, then convert to user timezone
+            today = timezone.now().astimezone(tz).date()
+        except Exception:
+            pass
 
     # Today's attendance
     attendance = Attendance.objects.filter(employee=employee, date=today).first()
 
-    # Stats (Last 30 days)
-    last_month = today - timedelta(days=30)
-    recent_attendance = Attendance.objects.filter(
-        employee=employee, date__gte=last_month, date__lte=today
-    )
+    # --- Comprehensive Attendance History (Last 30 Days) ---
+    end_date = today
+    start_date = today - timedelta(days=30)
+    
+    # Fetch existing records
+    attendance_records = {att.date: att for att in Attendance.objects.filter(employee=employee, date__range=[start_date, end_date])}
+    
+    # Fetch leaves
+    leaves = LeaveRequest.objects.filter(employee=employee, status='APPROVED', start_date__lte=end_date, end_date__gte=start_date)
+    leave_dates = {}
+    for l in leaves:
+        curr = max(l.start_date, start_date)
+        while curr <= min(l.end_date, end_date):
+            leave_dates[curr] = "LEAVE"
+            curr += timedelta(days=1)
+            
+    # Fetch Holidays
+    from companies.models import Holiday
+    holiday_q = Q(location__isnull=True)
+    if employee.location:
+        holiday_q |= Q(location=employee.location)
+    holidays = Holiday.objects.filter(company=employee.company, date__range=[start_date, end_date], is_active=True).filter(holiday_q)
+    holiday_dates = {h.date: h.name for h in holidays}
+    
+    history = []
+    curr_date = end_date
+    while curr_date >= start_date:
+        if curr_date in attendance_records:
+            history.append(attendance_records[curr_date])
+        else:
+            if employee.is_week_off(curr_date):
+                status = "WEEKLY_OFF"
+            elif curr_date in holiday_dates:
+                status = "HOLIDAY"
+            elif curr_date in leave_dates:
+                status = "LEAVE"
+            elif curr_date == today:
+                status = "NOT_LOGGED_IN"
+            else:
+                status = "MISSED"
+                
+            history.append({
+                'date': curr_date,
+                'status': status,
+                'status_display': status.replace('_', ' ').title(),
+                'clock_in': None,
+                'clock_out': None,
+                'effective_hours': "-",
+                'id': None
+            })
+        curr_date -= timedelta(days=1)
 
-    # Calculate stats
-    total_days = recent_attendance.count()
-    present_days = recent_attendance.filter(status="PRESENT").count()
-    wfh_days = recent_attendance.filter(status="WFH").count()
-    leave_days = recent_attendance.filter(status="LEAVE").count()
-
-    # Average working hours
+    # Calculate stats from history
+    total_days = len(history)
+    present_days = 0
+    wfh_days = 0
+    leave_days = 0
+    absent_days = 0
     total_seconds = 0
-    count = 0
-    for att in recent_attendance:
-        if att.clock_in and att.clock_out:
-            total_seconds += (att.clock_out - att.clock_in).total_seconds()
-            count += 1
+    sessions_with_time = 0
+
+    for item in history:
+        if isinstance(item, Attendance):
+            status = item.status
+            if item.clock_in and item.clock_out:
+                total_seconds += (item.clock_out - item.clock_in).total_seconds()
+                sessions_with_time += 1
+        else:
+            status = item.get('status')
+
+        if status == 'PRESENT':
+            present_days += 1
+        elif status == 'WFH':
+            wfh_days += 1
+        elif status == 'LEAVE':
+            leave_days += 1
+        elif status in ['ABSENT', 'MISSED']:
+            absent_days += 1
 
     avg_hours = "00:00"
-    if count > 0:
-        avg_sec = total_seconds / count
+    if sessions_with_time > 0:
+        avg_sec = total_seconds / sessions_with_time
         h = int(avg_sec // 3600)
         m = int((avg_sec % 3600) // 60)
         avg_hours = f"{h:02d}:{m:02d}"
@@ -724,58 +805,79 @@ def employee_dashboard(request):
     week_start = today - timedelta(days=today.weekday())  # Monday
     week_end = week_start + timedelta(days=6)  # Sunday
 
-    week_attendance = Attendance.objects.filter(
-        employee=employee, date__gte=week_start, date__lte=week_end
-    )
+    # Filter history for this week
+    week_history = [item for item in history if week_start <= (item.date if isinstance(item, Attendance) else item['date']) <= week_end]
+    
+    week_present = 0
+    week_wfh = 0
+    week_leave = 0
+    week_absent = 0
+    week_total = 0 # Expected work days
 
-    week_present = week_attendance.filter(status="PRESENT").count()
-    week_wfh = week_attendance.filter(status="WFH").count()
-    week_leave = week_attendance.filter(status="LEAVE").count()
-    week_total = week_attendance.exclude(status__in=["WEEKLY_OFF", "HOLIDAY"]).count()
-    week_absent = max(0, week_total - week_present - week_wfh - week_leave)
+    for item in week_history:
+        date = item.date if isinstance(item, Attendance) else item['date']
+        status = item.status if isinstance(item, Attendance) else item['status']
+        
+        if status == 'PRESENT':
+            week_present += 1
+            week_total += 1
+        elif status == 'WFH':
+            week_wfh += 1
+            week_total += 1
+        elif status == 'LEAVE':
+            week_leave += 1
+            week_total += 1
+        elif status in ['ABSENT', 'MISSED']:
+            week_absent += 1
+            week_total += 1
+        elif status in ['WEEKLY_OFF', 'HOLIDAY']:
+            pass # Don't count in total expected work days
 
     week_attendance_rate = 0
     if week_total > 0:
         week_attendance_rate = round(((week_present + week_wfh) / week_total) * 100)
 
-    # Yearly stats (current calendar year)
+    # Yearly stats - Simplified based on existing records + estimate
     year_start = today.replace(month=1, day=1)
-    year_attendance = Attendance.objects.filter(
-        employee=employee, date__gte=year_start, date__lte=today
-    )
+    year_attendance = Attendance.objects.filter(employee=employee, date__gte=year_start, date__lte=today)
 
     year_present = year_attendance.filter(status="PRESENT").count()
     year_wfh = year_attendance.filter(status="WFH").count()
     year_leave = year_attendance.filter(status="LEAVE").count()
+    
+    # Estimate total working days so far (excluding weekends)
+    total_days_so_far = (today - year_start).days + 1
+    # Very rough estimate: 5/7 of days are working days
+    # Better: count actual non-week-off days if possible, but for now let's keep it simple or use database
     year_total = year_attendance.exclude(status__in=["WEEKLY_OFF", "HOLIDAY"]).count()
+    
+    # If year_total is less than historical records, it's definitely undercounting missed days
+    # But without full history for year, we can't be precise. 
+    # Let's at least use what we have.
 
     year_attendance_rate = 0
     if year_total > 0:
         year_attendance_rate = round(((year_present + year_wfh) / year_total) * 100)
 
+
     # Leave balance
-    leave_balance = getattr(employee, 'leave_balance', None)
+    leave_balance = getattr(employee, "leave_balance", None)
+    if leave_balance:
+        # Force refresh from database to get latest data
+        leave_balance.refresh_from_db()
 
     # Recent leave requests
-    recent_leave_requests = LeaveRequest.objects.filter(employee=employee).order_by(
-        "-created_at"
-    )[:5]
-
-    # Attendance history
-    history = Attendance.objects.filter(employee=employee).order_by("-date")[:30]
+    recent_leave_requests = LeaveRequest.objects.filter(employee=employee).order_by("-created_at")[:5]
 
     # --- Announcements & Celebrations Data ---
+
     from companies.models import Announcement, Holiday
-    from django.db.models import Q
 
     # Get all company employees for celebrations
     company_employees = Employee.objects.filter(company=employee.company, is_active=True)
-    
+
     # 1. Announcements
-    announcements = (
-        Announcement.objects.filter(company=employee.company, is_active=True)
-        .order_by("-created_at")[:5]
-    )
+    announcements = Announcement.objects.filter(company=employee.company, is_active=True).order_by("-created_at")[:5]
 
     # 2. Upcoming Birthdays & Anniversaries
     future_date = today + timedelta(days=30)
@@ -789,7 +891,7 @@ def employee_dashboard(request):
                 this_year_bday = emp.dob.replace(year=today.year)
             except ValueError:
                 this_year_bday = emp.dob.replace(year=today.year, day=28)
-            
+
             if this_year_bday < today:
                 try:
                     next_birthday = emp.dob.replace(year=today.year + 1)
@@ -800,13 +902,15 @@ def employee_dashboard(request):
 
             if today <= next_birthday <= future_date:
                 days_left = (next_birthday - today).days
-                upcoming_birthdays.append({
-                    "employee": emp,
-                    "date": next_birthday,
-                    "display_date": next_birthday,
-                    "is_today": days_left == 0,
-                    "days_left": days_left,
-                })
+                upcoming_birthdays.append(
+                    {
+                        "employee": emp,
+                        "date": next_birthday,
+                        "display_date": next_birthday,
+                        "is_today": days_left == 0,
+                        "days_left": days_left,
+                    }
+                )
 
         # Work Anniversary
         if emp.date_of_joining:
@@ -828,13 +932,15 @@ def employee_dashboard(request):
 
             if today <= next_anniv <= future_date and years_completed > 0:
                 days_left = (next_anniv - today).days
-                upcoming_anniversaries.append({
-                    "employee": emp,
-                    "date": next_anniv,
-                    "years": years_completed,
-                    "is_today": days_left == 0,
-                    "days_left": days_left,
-                })
+                upcoming_anniversaries.append(
+                    {
+                        "employee": emp,
+                        "date": next_anniv,
+                        "years": years_completed,
+                        "is_today": days_left == 0,
+                        "days_left": days_left,
+                    }
+                )
 
     upcoming_birthdays.sort(key=lambda x: x["days_left"])
     upcoming_anniversaries.sort(key=lambda x: x["days_left"])
@@ -909,40 +1015,98 @@ def employee_dashboard(request):
             celebration_type = "anniversary" if not celebration_type else "both"
 
     context["celebration_type"] = celebration_type
-    context["years_service"] = (
-        today.year - employee.date_of_joining.year if employee.date_of_joining else 0
-    )
+    context["years_service"] = today.year - employee.date_of_joining.year if employee.date_of_joining else 0
 
     return render(request, "core/employee_dashboard.html", context)
 
 
 @login_required
 def personal_home(request):
+    from companies.models import Announcement
     context = {}
     if hasattr(request.user, "employee_profile"):
         employee = request.user.employee_profile
         today = timezone.localdate()
 
+        # Adjust today based on employee location timezone
+        user_timezone = "Asia/Kolkata"
+        if employee.location and hasattr(employee.location, "timezone"):
+            try:
+                import pytz
+                user_timezone = employee.location.timezone
+                tz = pytz.timezone(user_timezone)
+                today = timezone.now().astimezone(tz).date()
+            except Exception:
+                pass
+        
+        context["user_timezone"] = user_timezone
+
         # Today's attendance
         attendance = Attendance.objects.filter(employee=employee, date=today).first()
         context["attendance"] = attendance
 
-        # Stats (Last 7 days)
-        last_week = today - timedelta(days=7)
-        recent_attendance = Attendance.objects.filter(
-            employee=employee, date__gte=last_week
-        )
+        # --- Comprehensive Attendance History (Last 30 Days) ---
+        end_date = today
+        start_date = today - timedelta(days=30)
+        
+        # Fetch existing records
+        attendance_records = {att.date: att for att in Attendance.objects.filter(employee=employee, date__range=[start_date, end_date])}
+        
+        # Fetch leaves
+        leaves = LeaveRequest.objects.filter(employee=employee, status='APPROVED', start_date__lte=end_date, end_date__gte=start_date)
+        leave_dates = {}
+        for l in leaves:
+            curr = max(l.start_date, start_date)
+            while curr <= min(l.end_date, end_date):
+                leave_dates[curr] = "LEAVE"
+                curr += timedelta(days=1)
+                
+        # Fetch Holidays
+        holiday_q = Q(location__isnull=True)
+        if employee.location:
+            holiday_q |= Q(location=employee.location)
+        holidays = Holiday.objects.filter(company=employee.company, date__range=[start_date, end_date], is_active=True).filter(holiday_q)
+        holiday_dates = {h.date: h.name for h in holidays}
+        
+        history = []
+        curr_date = end_date
+        while curr_date >= start_date:
+            if curr_date in attendance_records:
+                history.append(attendance_records[curr_date])
+            else:
+                if employee.is_week_off(curr_date):
+                    status = "WEEKLY_OFF"
+                elif curr_date in holiday_dates:
+                    status = "HOLIDAY"
+                elif curr_date in leave_dates:
+                    status = "LEAVE"
+                elif curr_date == today:
+                    status = "NOT_LOGGED_IN"
+                else:
+                    status = "MISSED"
+                    
+                history.append({
+                    'date': curr_date,
+                    'status': status,
+                    'status_display': status.replace('_', ' ').title(),
+                    'clock_in': None,
+                    'clock_out': None,
+                    'effective_hours': "-",
+                    'id': None
+                })
+            curr_date -= timedelta(days=1)
 
+        # Calculate stats from history
         total_seconds = 0
-        count = 0
-        for att in recent_attendance:
+        sessions_with_time = 0
+        for att in [item for item in history if isinstance(item, Attendance)]:
             if att.clock_in and att.clock_out:
                 total_seconds += (att.clock_out - att.clock_in).total_seconds()
-                count += 1
+                sessions_with_time += 1
 
         avg_hours = "00:00"
-        if count > 0:
-            avg_sec = total_seconds / count
+        if sessions_with_time > 0:
+            avg_sec = total_seconds / sessions_with_time
             h = int(avg_sec // 3600)
             m = int((avg_sec % 3600) // 60)
             avg_hours = f"{h:02d}:{m:02d}"
@@ -950,57 +1114,56 @@ def personal_home(request):
         context["avg_hours"] = avg_hours
         context["on_time_percentage"] = "100%"  # Stub for now
 
-        # Attendance History
-        history = Attendance.objects.filter(employee=employee).order_by("-date")[:30]
         context["attendance_history"] = history
 
+
         # Announcements - current month
-        from companies.models import Announcement
-        from django.db.models import Q
-        
+
+
         announcements = (
             Announcement.objects.filter(company=employee.company, is_active=True)
             .filter(Q(location__isnull=True) | Q(location=employee.location))
             .order_by("-created_at")[:5]
         )
         context["announcements"] = announcements
-        
+
         # Current month start and end dates
         current_month = today.month
         current_year = today.year
         from calendar import monthrange
+
         _, last_day = monthrange(current_year, current_month)
         month_start = today.replace(day=1)
         month_end = today.replace(day=last_day)
-        
+
         # Celebrations - Birthdays this month (all dates in current month)
         company_employees = Employee.objects.filter(company=employee.company)
-        birthdays = company_employees.filter(dob__month=current_month).order_by('dob__day')
+        birthdays = company_employees.filter(dob__month=current_month).order_by("dob__day")
         context["birthdays"] = birthdays
-        
+
         # Today's specific celebrations
         context["today"] = today
         context["todays_birthdays"] = company_employees.filter(dob__month=today.month, dob__day=today.day)
         context["todays_anniversaries"] = company_employees.filter(
-            date_of_joining__month=today.month, 
-            date_of_joining__day=today.day
+            date_of_joining__month=today.month, date_of_joining__day=today.day
         ).exclude(date_of_joining__year=today.year)
-        
+
         # Work Anniversaries this month (all dates in current month)
-        work_anniversaries = company_employees.filter(
-            date_of_joining__month=current_month
-        ).exclude(date_of_joining__year=current_year).order_by('date_of_joining__day')
+        work_anniversaries = (
+            company_employees.filter(date_of_joining__month=current_month)
+            .exclude(date_of_joining__year=current_year)
+            .order_by("date_of_joining__day")
+        )
         context["work_anniversaries"] = work_anniversaries
-        
+
         # Holidays - All holidays in current month (past and upcoming)
-        from companies.models import Holiday
-        
+
         upcoming_holidays = (
             Holiday.objects.filter(
                 company=employee.company,
                 date__gte=month_start,
                 date__lte=month_end,
-                is_active=True
+                is_active=True,
             )
             .filter(Q(location__isnull=True) | Q(location=employee.location))
             .order_by("date")
@@ -1020,9 +1183,7 @@ def personal_home(request):
                 is_grace_used=True,
             ).count()
             context["grace_used_count"] = grace_used_count
-            context["late_logins_remaining"] = max(
-                0, employee.assigned_shift.allowed_late_logins - grace_used_count
-            )
+            context["late_logins_remaining"] = max(0, employee.assigned_shift.allowed_late_logins - grace_used_count)
 
             # Timeline Calculations
             # Define Start and End (in minutes from midnight)
@@ -1036,28 +1197,27 @@ def personal_home(request):
                 total_duration += 24 * 60  # Overnight shift
 
             timeline_items = []
-            
+
             from employees.models import AttendanceSession
-            sessions = AttendanceSession.objects.filter(
-                employee=employee,
-                date=today
-            ).order_by('session_number')
+
+            sessions = AttendanceSession.objects.filter(employee=employee, date=today).order_by("session_number")
 
             if sessions.exists():
                 session_list = list(sessions)
                 for i, session in enumerate(session_list):
-                    is_first = (i == 0)
-                    is_last_recorded = (i == len(session_list) - 1)
-                    
+                    is_first = i == 0
+                    is_last_recorded = i == len(session_list) - 1
+
                     # Clock In Node
                     if session.clock_in:
                         login_time = timezone.localtime(session.clock_in).time()
                         login_min = to_minutes(login_time)
                         offset = login_min - shift_start_min
-                        if offset < 0: offset += 24 * 60
+                        if offset < 0:
+                            offset += 24 * 60
                         percent = (offset / total_duration) * 100
                         percent = max(0, min(percent, 100))
-                        
+
                         # Dot class logic: 1st clock-in shows time and session type
                         if is_first:
                             dot_class = "web" if session.session_type == "WEB" else "remote"
@@ -1065,80 +1225,94 @@ def personal_home(request):
                         else:
                             dot_class = "clock-in-dot"
                             show_time = False
-                            
-                        timeline_items.append({
-                            "type": "login",
-                            "time": login_time,
-                            "label": f"Login {session.session_number}",
-                            "percent": percent,
-                            "dot_class": dot_class,
-                            "show_time": show_time,
-                            "is_late": attendance.is_late if is_first else False
-                        })
-                    
+
+                        timeline_items.append(
+                            {
+                                "type": "login",
+                                "time": login_time,
+                                "label": f"Login {session.session_number}",
+                                "percent": percent,
+                                "dot_class": dot_class,
+                                "show_time": show_time,
+                                "is_late": attendance.is_late if is_first else False,
+                            }
+                        )
+
                     # Clock Out Node
                     if session.clock_out:
                         logout_time = timezone.localtime(session.clock_out).time()
                         logout_min = to_minutes(logout_time)
                         offset = logout_min - shift_start_min
-                        if offset < 0: offset += 24 * 60
+                        if offset < 0:
+                            offset += 24 * 60
                         percent = (offset / total_duration) * 100
                         percent = max(0, min(percent, 100))
-                        
+
                         # Dot class logic: Last clock-out shows time
                         # Special Case: Only show time for the VERY LAST clockout of the day if session_count == max_sessions
                         # or if it's the last one recorded and they are not clocked in.
                         is_clocked_in = attendance.is_currently_clocked_in if attendance else False
-                        
+
                         if is_last_recorded and not is_clocked_in:
                             dot_class = "logout"
                             show_time = True
                         else:
                             dot_class = "clock-out-dot"
                             show_time = False
-                            
-                        timeline_items.append({
-                            "type": "logout",
-                            "time": logout_time,
-                            "label": f"Logout {session.session_number}",
-                            "percent": percent,
-                            "dot_class": dot_class,
-                            "show_time": show_time,
-                            "is_early": attendance.is_early_departure if is_last_recorded else False
-                        })
-                
-                # If currently clocked in, or not reached max sessions, 
+
+                        timeline_items.append(
+                            {
+                                "type": "logout",
+                                "time": logout_time,
+                                "label": f"Logout {session.session_number}",
+                                "percent": percent,
+                                "dot_class": dot_class,
+                                "show_time": show_time,
+                                "is_early": attendance.is_early_departure if is_last_recorded else False,
+                            }
+                        )
+
+                # If currently clocked in, or not reached max sessions,
                 # we don't necessarily need to add the hollow End node if we have recorded sessions,
                 # but it helps to fill the bar.
-                if not sessions.filter(clock_out__isnull=False, session_number=attendance.max_daily_sessions if attendance else 3).exists():
-                     if not timeline_items or timeline_items[-1]['percent'] < 100:
-                        timeline_items.append({
-                            "type": "logout",
-                            "time": shift.end_time,
-                            "label": "End",
-                            "percent": 100,
-                            "dot_class": "hollow",
-                            "show_time": True
-                        })
-            
+                if not sessions.filter(
+                    clock_out__isnull=False,
+                    session_number=attendance.max_daily_sessions if attendance else 3,
+                ).exists():
+                    if not timeline_items or timeline_items[-1]["percent"] < 100:
+                        timeline_items.append(
+                            {
+                                "type": "logout",
+                                "time": shift.end_time,
+                                "label": "End",
+                                "percent": 100,
+                                "dot_class": "hollow",
+                                "show_time": True,
+                            }
+                        )
+
             else:
                 # No sessions yet
-                timeline_items.append({
-                    "type": "login",
-                    "time": shift.start_time,
-                    "label": "Start",
-                    "percent": 0,
-                    "dot_class": "hollow",
-                    "show_time": True
-                })
-                timeline_items.append({
-                    "type": "logout",
-                    "time": shift.end_time,
-                    "label": "End",
-                    "percent": 100,
-                    "dot_class": "hollow",
-                    "show_time": True
-                })
+                timeline_items.append(
+                    {
+                        "type": "login",
+                        "time": shift.start_time,
+                        "label": "Start",
+                        "percent": 0,
+                        "dot_class": "hollow",
+                        "show_time": True,
+                    }
+                )
+                timeline_items.append(
+                    {
+                        "type": "logout",
+                        "time": shift.end_time,
+                        "label": "End",
+                        "percent": 100,
+                        "dot_class": "hollow",
+                        "show_time": True,
+                    }
+                )
 
             context["timeline_items"] = timeline_items
 
@@ -1146,11 +1320,24 @@ def personal_home(request):
             # Fallback
             from companies.models import ShiftTiming
 
-            shift_timing, _ = ShiftTiming.objects.get_or_create(
-                company=employee.company
-            )
+            shift_timing, _ = ShiftTiming.objects.get_or_create(company=employee.company)
             context["shift_timing"] = shift_timing
             context["timeline_items"] = []  # Empty for default
+
+        # Add leave balance to context
+        try:
+            leave_balance = employee.leave_balance
+            leave_balance.refresh_from_db()  # Force refresh to get latest data
+            context["leave_balance"] = leave_balance
+        except Exception:
+            # Create leave balance if it doesn't exist
+            from employees.models import LeaveBalance
+            leave_balance = LeaveBalance.objects.create(
+                employee=employee,
+                casual_leave_allocated=0.0,
+                sick_leave_allocated=0.0
+            )
+            context["leave_balance"] = leave_balance
 
     return render(request, "core/personal_home.html", context)
 
@@ -1167,23 +1354,26 @@ def my_profile(request):
 def my_leaves(request):
     try:
         employee = request.user.employee_profile
+        # Force refresh from database to get latest data
+        employee.refresh_from_db()
 
     except Exception:
         # Graceful fallback or auto-create (reusing logic from profile view might be better)
-
         messages.error(request, "Employee profile not found.")
-
         return redirect("personal_home")
 
     # Get or create balance (accrual handled by command, but ensure existence)
-
     balance, created = LeaveBalance.objects.get_or_create(employee=employee)
+    
+    # Force refresh balance from database to get latest data after bulk upload
+    balance.refresh_from_db()
 
     if request.method == "POST":
         leave_type = request.POST.get("leave_type")
         start_date = request.POST.get("start_date")
         end_date = request.POST.get("end_date")
         reason = request.POST.get("reason")
+        duration = request.POST.get("duration", "FULL")  # Get duration from form, default to FULL
 
         # Basic Validation
         if not (leave_type and start_date and end_date):
@@ -1204,6 +1394,12 @@ def my_leaves(request):
                 messages.error(request, "End date cannot be before start date.")
                 return redirect("my_leaves")
 
+            # Validate duration for single-day leaves
+            is_single_day = s_dt == e_dt
+            if not is_single_day and duration in ["FIRST_HALF", "SECOND_HALF"]:
+                messages.error(request, "Half-day options are only available for single-day leaves.")
+                return redirect("my_leaves")
+
             # Create Leave Request
             leave_request = LeaveRequest.objects.create(
                 employee=employee,
@@ -1211,7 +1407,7 @@ def my_leaves(request):
                 start_date=start_date,
                 end_date=end_date,
                 reason=reason,
-                duration="FULL",
+                duration=duration,  # Use the duration from form
                 status="PENDING",
             )
 
@@ -1242,13 +1438,11 @@ def my_leaves(request):
         except Exception as e:
             messages.error(request, f"Error submitting request: {str(e)}")
             # Log the error for admin debug
-            print(f"Leave Application Error: {e}")
+            logger.error(f"Leave Application Error: {e}")
 
         return redirect("my_leaves")
 
-    recent_requests = LeaveRequest.objects.filter(employee=employee).order_by(
-        "-created_at"
-    )[:5]
+    recent_requests = LeaveRequest.objects.filter(employee=employee).order_by("-created_at")[:5]
 
     return render(
         request,
@@ -1322,17 +1516,13 @@ def employee_holidays(request):
 
     # Filter by employee's location OR global holidays
 
-    query_filter = Q(location__name__iexact="Global") | Q(
-        location__name__iexact="All Locations"
-    )
+    query_filter = Q(location__name__iexact="Global") | Q(location__name__iexact="All Locations")
 
     if employee.location:
         query_filter |= Q(location=employee.location)
 
     holidays = (
-        Holiday.objects.filter(
-            company=request.user.company, year=year_filter, is_active=True
-        )
+        Holiday.objects.filter(company=request.user.company, year=year_filter, is_active=True)
         .filter(query_filter)
         .order_by("date")
     )
@@ -1340,10 +1530,7 @@ def employee_holidays(request):
     # Get available years
 
     years = (
-        Holiday.objects.filter(company=request.user.company)
-        .values_list("year", flat=True)
-        .distinct()
-        .order_by("-year")
+        Holiday.objects.filter(company=request.user.company).values_list("year", flat=True).distinct().order_by("-year")
     )
 
     # Group holidays by month
@@ -1385,9 +1572,7 @@ def employee_holidays(request):
             "mandatory_count": mandatory_count,
             "optional_count": optional_count,
             "upcoming_holidays": upcoming_holidays,
-            "employee_location": employee.location.name
-            if employee.location
-            else "Not Assigned",
+            "employee_location": employee.location.name if employee.location else "Not Assigned",
         },
     )
 
@@ -1471,64 +1656,107 @@ def org_chart(request):
         company=request.user.company, employment_status="ACTIVE", is_active=True
     ).select_related("user", "manager")
 
-    # Build dictionary Key=USER_ID (not Employee ID)
-    nodes = {}
-    for emp in employees:
-        nodes[emp.user.id] = {
-            "id": emp.user.id,
-            "employee": emp,
-            "user": emp.user,
-            "direct_reports": [],
-            "is_superadmin": False,
-        }
+    # Helper to detect cycles
+    def creates_cycle(parent_node, child_node):
+        """Check if adding child_node to parent_node would create a cycle"""
+        queue = [child_node]
+        visited = {child_node["id"]}
+        while queue:
+            curr = queue.pop(0)
+            if curr["id"] == parent_node["id"]:
+                return True
+            for grandchild in curr["direct_reports"]:
+                if grandchild["id"] not in visited:
+                    visited.add(grandchild["id"])
+                    queue.append(grandchild)
+        return False
 
-    roots = []
+    try:
+        # Build dictionary Key=USER_ID (not Employee ID)
+        nodes = {}
+        for emp in employees:
+            if emp.user:
+                nodes[emp.user.id] = {
+                    "id": emp.user.id,
+                    "employee": emp,
+                    "user": emp.user,
+                    "direct_reports": [],
+                    "is_superadmin": False,
+                }
 
-    for emp in employees:
-        current_node = nodes[emp.user.id]
-        manager_user = emp.manager  # User object
+        roots = []
+        for emp in employees:
+            if not emp.user:
+                continue
 
-        if manager_user:
-            # Case A: Manager is in the company (exists in nodes)
-            if manager_user.id in nodes:
-                nodes[manager_user.id]["direct_reports"].append(current_node)
-            else:
-                # Case B: Manager is External (SuperAdmin)
-                if manager_user.id not in nodes:
-                    if manager_user.role == User.Role.SUPERADMIN:
-                        nodes[manager_user.id] = {
-                            "id": manager_user.id,
-                            "employee": None,
-                            "user": manager_user,
-                            "direct_reports": [],
-                            "is_superadmin": True,
-                        }
-                        roots.append(nodes[manager_user.id])
+            current_node = nodes[emp.user.id]
+            manager_user = emp.manager  # User object
 
+            if manager_user and manager_user.id != emp.user.id:
+                # Case A: Manager is in the company (exists in nodes)
                 if manager_user.id in nodes:
-                    nodes[manager_user.id]["direct_reports"].append(current_node)
+                    manager_node = nodes[manager_user.id]
+                    if not creates_cycle(manager_node, current_node):
+                        if current_node not in manager_node["direct_reports"]:
+                            manager_node["direct_reports"].append(current_node)
+                    else:
+                        if current_node not in roots:
+                            roots.append(current_node)
                 else:
+                    # Case B: Manager is External (SuperAdmin)
+                    if manager_user.role == User.Role.SUPERADMIN:
+                        if manager_user.id not in nodes:
+                            nodes[manager_user.id] = {
+                                "id": manager_user.id,
+                                "employee": None,
+                                "user": manager_user,
+                                "direct_reports": [],
+                                "is_superadmin": True,
+                            }
+                            roots.append(nodes[manager_user.id])
+
+                        manager_node = nodes[manager_user.id]
+                        if not creates_cycle(manager_node, current_node):
+                            if current_node not in manager_node["direct_reports"]:
+                                manager_node["direct_reports"].append(current_node)
+                    else:
+                        if current_node not in roots:
+                            roots.append(current_node)
+            else:
+                if current_node not in roots:
                     roots.append(current_node)
-        else:
-            roots.append(current_node)
 
-    # Filter roots to ensure no children (though logic above should handle it somewhat)
-    child_ids = set()
-    for uid, node in nodes.items():
-        for child in node["direct_reports"]:
-            child_ids.add(child["id"])
+        # Filter roots to ensure no children
+        child_ids = set()
+        for uid, node in nodes.items():
+            for child in node["direct_reports"]:
+                child_ids.add(child["id"])
 
-    final_roots = [node for uid, node in nodes.items() if uid not in child_ids]
+        final_roots = [node for uid, node in nodes.items() if uid not in child_ids]
 
-    return render(
-        request,
-        "core/org_chart.html",
-        {
-            "title": "Organisation Chart",
-            "roots": final_roots,
-            "company": request.user.company,
-        },
-    )
+        return render(
+            request,
+            "core/org_chart.html",
+            {
+                "title": "Organisation Chart",
+                "roots": final_roots,
+                "company": request.user.company,
+            },
+        )
+    except Exception as e:
+        import traceback
+
+        logger.error(f"Admin Org Chart Error: {str(e)}\n{traceback.format_exc()}")
+        return render(
+            request,
+            "core/org_chart.html",
+            {
+                "title": "Organisation Chart",
+                "roots": [],
+                "company": request.user.company,
+                "error": "Could not generate hierarchical view. Please check reporting structures.",
+            },
+        )
 
 
 @login_required
@@ -1540,68 +1768,210 @@ def employee_org_chart(request):
         return redirect("dashboard")
 
     # Fetch only ACTIVE employees for this company
-    employees = Employee.objects.filter(
+    all_employees = Employee.objects.filter(
         company=request.user.company, employment_status="ACTIVE", is_active=True
     ).select_related("user", "manager")
 
-    # Build dictionary Key=USER_ID (not Employee ID)
-    nodes = {}
-    for emp in employees:
-        nodes[emp.user.id] = {
-            "id": emp.user.id,
-            "employee": emp,
-            "user": emp.user,
-            "direct_reports": [],
-            "is_superadmin": False,
-        }
+    # Filter employees based on Role
+    final_employees = []
 
-    roots = []
+    # Helper structure for subtree logic
+    emp_map = {e.user.id: e for e in all_employees}
+    subordinates_map = {}
+    for emp in all_employees:
+        if emp.manager_id:
+            if emp.manager_id not in subordinates_map:
+                subordinates_map[emp.manager_id] = []
+            subordinates_map[emp.manager_id].append(emp)
 
-    for emp in employees:
-        current_node = nodes[emp.user.id]
-        manager_user = emp.manager  # User object
+    def get_subtree(user_id, visited=None):
+        """Recursively get all subordinates with cycle protection"""
+        if visited is None:
+            visited = set()
 
-        if manager_user:
-            # Case A: Manager is in the company (exists in nodes)
-            if manager_user.id in nodes:
-                nodes[manager_user.id]["direct_reports"].append(current_node)
+        if user_id in visited:
+            return []
+        visited.add(user_id)
+
+        result = []
+        if user_id in subordinates_map:
+            for sub in subordinates_map[user_id]:
+                result.append(sub)
+                result.extend(get_subtree(sub.user.id, visited))
+        return result
+
+    # Determine context
+    current_emp = getattr(request.user, "employee_profile", None)
+    role = getattr(request.user, "role", None)
+
+    if current_emp:
+        if role == User.Role.EMPLOYEE:
+            # Employee View: Department + Reporting Manager
+            dept = current_emp.department
+            manager_id = current_emp.manager_id
+
+            added_ids = set()
+
+            # 1. Add Department Colleagues
+            for emp in all_employees:
+                if emp.department == dept:
+                    final_employees.append(emp)
+                    added_ids.add(emp.id)
+
+            # 2. Add Reporting Manager (if not already added)
+            if manager_id and manager_id in emp_map:
+                mgr = emp_map[manager_id]
+                if mgr.id not in added_ids:
+                    final_employees.append(mgr)
+                    added_ids.add(mgr.id)
+
+        elif role in [User.Role.MANAGER, User.Role.COMPANY_ADMIN]:
+            # Manager/Admin View
+            # Rule: "his team and his reporting manager"
+
+            if current_emp.manager_id:
+                # Restricted View
+                added_ids = set()
+
+                # 1. Reporting Manager
+                if current_emp.manager_id in emp_map:
+                    mgr = emp_map[current_emp.manager_id]
+                    final_employees.append(mgr)
+                    added_ids.add(mgr.id)
+
+                # 2. Self
+                if current_emp.id not in added_ids:
+                    final_employees.append(current_emp)
+                    added_ids.add(current_emp.id)
+
+                # 3. Team (Subtree)
+                team = get_subtree(request.user.id)
+                for member in team:
+                    if member.id not in added_ids:
+                        final_employees.append(member)
+                        added_ids.add(member.id)
             else:
-                # Case B: Manager is External (SuperAdmin)
-                if manager_user.id not in nodes:
-                    if manager_user.role == User.Role.SUPERADMIN:
-                        nodes[manager_user.id] = {
-                            "id": manager_user.id,
-                            "employee": None,
-                            "user": manager_user,
-                            "direct_reports": [],
-                            "is_superadmin": True,
-                        }
-                        roots.append(nodes[manager_user.id])
-
-                if manager_user.id in nodes:
-                    nodes[manager_user.id]["direct_reports"].append(current_node)
-                else:
-                    roots.append(current_node)
+                # Top Level / CEO / No Manager -> Show All
+                final_employees = list(all_employees)
         else:
-            roots.append(current_node)
+            # Unknown role -> Show All
+            final_employees = list(all_employees)
+    else:
+        # No profile (e.g. SuperAdmin or Error) -> Show All
+        final_employees = list(all_employees)
 
-    # Filter roots to ensure no children
-    child_ids = set()
-    for uid, node in nodes.items():
-        for child in node["direct_reports"]:
-            child_ids.add(child["id"])
+    # Helper to detect cycles
+    def creates_cycle(parent_node, child_node):
+        """Check if adding child_node to parent_node would create a cycle"""
+        # BFS to see if parent is reachable from child (meaning child is already an ancestor of parent)
+        queue = [child_node]
+        visited = {child_node["id"]}
+        while queue:
+            curr = queue.pop(0)
+            if curr["id"] == parent_node["id"]:
+                return True
+            for grandchild in curr["direct_reports"]:
+                if grandchild["id"] not in visited:
+                    visited.add(grandchild["id"])
+                    queue.append(grandchild)
+        return False
 
-    final_roots = [node for uid, node in nodes.items() if uid not in child_ids]
+    try:
+        # Use the filtered list for node building
+        employees = final_employees
 
-    return render(
-        request,
-        "core/org_chart.html",
-        {
-            "title": "Organisation Chart",
-            "roots": final_roots,
-            "company": request.user.company,
-        },
-    )
+        # Build dictionary Key=USER_ID (not Employee ID)
+        nodes = {}
+        for emp in employees:
+            if emp.user:
+                nodes[emp.user.id] = {
+                    "id": emp.user.id,
+                    "employee": emp,
+                    "user": emp.user,
+                    "direct_reports": [],
+                    "is_superadmin": False,
+                }
+
+        roots = []
+        for emp in employees:
+            if not emp.user:
+                continue
+
+            current_node = nodes[emp.user.id]
+            manager_user = emp.manager  # User object
+
+            if manager_user and manager_user.id != emp.user.id:
+                # Case A: Manager is in the company (exists in nodes)
+                if manager_user.id in nodes:
+                    manager_node = nodes[manager_user.id]
+                    # Check for cycle before adding
+                    if not creates_cycle(manager_node, current_node):
+                        if current_node not in manager_node["direct_reports"]:
+                            manager_node["direct_reports"].append(current_node)
+                    else:
+                        # Cycle detected - do not link, treat as root to safely display
+                        if current_node not in roots:
+                            roots.append(current_node)
+
+                else:
+                    # Case B: Manager is External (SuperAdmin) or not in the filtered set
+                    if manager_user.role == User.Role.SUPERADMIN:
+                        # Create external manager node if needed
+                        if manager_user.id not in nodes:
+                            nodes[manager_user.id] = {
+                                "id": manager_user.id,
+                                "employee": None,
+                                "user": manager_user,
+                                "direct_reports": [],
+                                "is_superadmin": True,
+                            }
+                            roots.append(nodes[manager_user.id])
+
+                        manager_node = nodes[manager_user.id]
+                        if not creates_cycle(manager_node, current_node):
+                            if current_node not in manager_node["direct_reports"]:
+                                manager_node["direct_reports"].append(current_node)
+                    else:
+                        # Manager not in current view, add as root to prevent orphan
+                        if current_node not in roots:
+                            roots.append(current_node)
+            else:
+                # No manager or self-managed (shouldn't happen)
+                if current_node not in roots:
+                    roots.append(current_node)
+
+        # Filter roots to ensure no children - building from child_ids set is safer
+        child_ids = set()
+        for uid, node in nodes.items():
+            for child in node["direct_reports"]:
+                child_ids.add(child["id"])
+
+        final_roots = [node for uid, node in nodes.items() if uid not in child_ids]
+
+        return render(
+            request,
+            "core/org_chart.html",
+            {
+                "title": "Organisation Chart",
+                "roots": final_roots,
+                "company": request.user.company,
+            },
+        )
+    except Exception as e:
+        import traceback
+
+        logger.error(f"Org Chart Error: {str(e)}\n{traceback.format_exc()}")
+        # Fallback to simple list if tree fails
+        return render(
+            request,
+            "core/org_chart.html",
+            {
+                "title": "Organisation Chart",
+                "roots": [],
+                "company": request.user.company,
+                "error": "Could not generate hierarchical view. Please check reporting structures.",
+            },
+        )
 
 
 @login_required
@@ -1629,12 +1999,16 @@ def attendance_analytics(request):
         # Get direct reports
         manager_profile = safe_get_employee_profile(request.user)
         if manager_profile:
-            employees = Employee.objects.filter(manager=manager_profile)
+            employees = Employee.objects.filter(manager=request.user)
         else:
             employees = Employee.objects.none()
     else:
         # Admin gets all company employees
         employees = Employee.objects.filter(company=request.user.company)
+
+    # Filter out employees who left before the current month
+    # Show active employees OR employees who exited this month (or later)
+    employees = employees.filter(Q(is_active=True) | Q(exit_date__gte=month_start))
 
     total_employees = employees.count()
     employee_ids = employees.values_list("id", flat=True)
@@ -1662,18 +2036,14 @@ def attendance_analytics(request):
     present_pct = (present_today / total_employees * 100) if total_employees > 0 else 0
 
     # This week's stats
-    week_attendance = Attendance.objects.filter(
-        employee__in=employee_ids, date__gte=week_start, date__lte=today
-    )
+    week_attendance = Attendance.objects.filter(employee__in=employee_ids, date__gte=week_start, date__lte=today)
 
     week_present = week_attendance.filter(status="PRESENT").count()
     week_absent = week_attendance.filter(status="ABSENT").count()
     week_wfh = week_attendance.filter(status="WFH").count()
 
     # This month's stats
-    month_attendance = Attendance.objects.filter(
-        employee__in=employee_ids, date__gte=month_start, date__lte=today
-    )
+    month_attendance = Attendance.objects.filter(employee__in=employee_ids, date__gte=month_start, date__lte=today)
 
     month_present = month_attendance.filter(status="PRESENT").count()
     month_absent = month_attendance.filter(status="ABSENT").count()
@@ -1785,26 +2155,24 @@ def attendance_report(request):
     if request.user.role == User.Role.MANAGER:
         manager_profile = safe_get_employee_profile(request.user)
         if manager_profile:
-            employees = Employee.objects.filter(
-                manager=manager_profile
-            ).select_related("user", "manager", "location")
+            employees = Employee.objects.filter(manager=request.user).select_related("user", "manager", "location")
         else:
             employees = Employee.objects.none()
     else:
-        employees = Employee.objects.filter(
-            company=request.user.company
-        ).select_related("user", "manager", "location")
+        employees = Employee.objects.filter(company=request.user.company).select_related("user", "manager", "location")
 
     if location_id:
         employees = employees.filter(location_id=location_id)
+
+    # Filter out employees who left before the report period
+    # Show active employees OR employees who exited on or after the start date
+    employees = employees.filter(Q(is_active=True) | Q(exit_date__gte=start_date))
 
     locations = Location.objects.filter(company=request.user.company, is_active=True)
     employee_ids = employees.values_list("id", flat=True)
 
     # Get all attendance records for the period
-    attendances = Attendance.objects.filter(
-        employee__in=employee_ids, date__gte=start_date, date__lte=end_date
-    )
+    attendances = Attendance.objects.filter(employee__in=employee_ids, date__gte=start_date, date__lte=end_date)
 
     # Get all holidays for the period and company
     holidays = Holiday.objects.filter(
@@ -1887,11 +2255,7 @@ def attendance_report(request):
             else:
                 # No attendance record - determine what it should be
                 # Check if it's a holiday for this employee's location
-                if (
-                    emp.location_id
-                    and emp.location_id in holiday_map
-                    and dt in holiday_map[emp.location_id]
-                ):
+                if emp.location_id and emp.location_id in holiday_map and dt in holiday_map[emp.location_id]:
                     status_code = "HOLIDAY"
                 # Check if it's a weekoff for this employee
                 elif emp.is_week_off(dt):
@@ -1936,27 +2300,19 @@ def attendance_report(request):
             emp_data["days"].append(display_val)
 
         # Calculate working days and attendance percentage
-        working_days = (
-            len(date_range)
-            - emp_data["stats"]["weekly_off"]
-            - emp_data["stats"]["holiday"]
-        )
+        working_days = len(date_range) - emp_data["stats"]["weekly_off"] - emp_data["stats"]["holiday"]
         present_days = emp_data["stats"]["present"]  # WFH is already counted as present
 
         emp_data["working_days"] = working_days
         emp_data["present_days"] = present_days
-        emp_data["attendance_percentage"] = round(
-            (present_days / working_days * 100) if working_days > 0 else 0, 1
-        )
+        emp_data["attendance_percentage"] = round((present_days / working_days * 100) if working_days > 0 else 0, 1)
 
         reports.append(emp_data)
 
     # Create days display (show date with day number)
     days_display = []
     for dt in date_range:
-        days_display.append(
-            {"day": dt.day, "month_short": dt.strftime("%b"), "date": dt}
-        )
+        days_display.append({"day": dt.day, "month_short": dt.strftime("%b"), "date": dt})
 
     return render(
         request,
@@ -2012,9 +2368,7 @@ def download_attendance(request):
 
     # Styles
     header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill(
-        start_color="2c5282", end_color="2c5282", fill_type="solid"
-    )
+    header_fill = PatternFill(start_color="2c5282", end_color="2c5282", fill_type="solid")
 
     # 1. Define Headers
     headers = [
@@ -2059,9 +2413,11 @@ def download_attendance(request):
 
     # 2. Fetch Data
 
-    employees = Employee.objects.filter(company=request.user.company).select_related(
-        "user", "manager", "location"
-    )
+    employees = Employee.objects.filter(company=request.user.company).select_related("user", "manager", "location")
+
+    # Filter out employees who left before the report period
+    employees = employees.filter(Q(is_active=True) | Q(exit_date__gte=start_date))
+
     if location_id:
         employees = employees.filter(location_id=location_id)
 
@@ -2100,9 +2456,7 @@ def download_attendance(request):
         ws.cell(row=row_num, column=2, value=emp.user.get_full_name())
         ws.cell(row=row_num, column=3, value=emp.designation)
         ws.cell(row=row_num, column=4, value=emp.department)
-        ws.cell(
-            row=row_num, column=5, value=emp.location.name if emp.location else "N/A"
-        )
+        ws.cell(row=row_num, column=5, value=emp.location.name if emp.location else "N/A")
         ws.cell(
             row=row_num,
             column=6,
@@ -2156,11 +2510,7 @@ def download_attendance(request):
                         status_code = "ABSENT"
             else:
                 # No attendance record - determine what it should be
-                if (
-                    emp.location_id
-                    and emp.location_id in holiday_map
-                    and dt in holiday_map[emp.location_id]
-                ):
+                if emp.location_id and emp.location_id in holiday_map and dt in holiday_map[emp.location_id]:
                     status_code = "HOLIDAY"
                 elif emp.is_week_off(dt):
                     status_code = "WEEKLY_OFF"
@@ -2203,9 +2553,7 @@ def download_attendance(request):
         total_days = len(date_cols)
         working_days = total_days - stats["weekly_off"] - stats["holiday"]
         present_days = stats["present"]  # WFH is already counted as present
-        attendance_percentage = round(
-            (present_days / working_days * 100) if working_days > 0 else 0, 1
-        )
+        attendance_percentage = round((present_days / working_days * 100) if working_days > 0 else 0, 1)
 
         ws.cell(row=row_num, column=col_idx, value=total_days)
         col_idx += 1
@@ -2267,47 +2615,17 @@ def leave_requests(request):
         admin_comment = request.POST.get("admin_comment", "")
 
         try:
-            leave_request = LeaveRequest.objects.get(
-                id=leave_id, employee__company=request.user.company
-            )
+            leave_request = LeaveRequest.objects.get(id=leave_id, employee__company=request.user.company)
 
             if action == "approve":
                 prev_status = leave_request.status
 
                 # Only transition and deduct if this wasn't already approved
                 if prev_status != "APPROVED":
-                    leave_request.status = "APPROVED"
-
-                    leave_request.approved_by = request.user
-
-                    leave_request.approved_at = timezone.now()
-
-                    leave_request.admin_comment = admin_comment
-
-                    # Update leave balance
-
-                    balance = leave_request.employee.leave_balance
-
-                    days = leave_request.total_days
-
-                    if leave_request.leave_type == "CL":
-                        balance.casual_leave_used += days
-
-                    elif leave_request.leave_type == "SL":
-                        balance.sick_leave_used += days
-
-                    elif leave_request.leave_type == "EL":
-                        balance.earned_leave_used += days
-
-                    elif leave_request.leave_type == "CO":
-                        balance.comp_off_used += days
-
-                    elif leave_request.leave_type == "UL":
-                        balance.unpaid_leave += days
-
-                    balance.save()
-
-                    leave_request.save()
+                    # Use the model's approve_leave method to handle all balance updates properly
+                    if leave_request.approve_leave(request.user, approval_type="FULL"):
+                        leave_request.admin_comment = admin_comment
+                        leave_request.save()
 
                     messages.success(
                         request,
@@ -2321,9 +2639,7 @@ def leave_requests(request):
                     from core.email_utils import send_leave_approval_notification
 
                     if not send_leave_approval_notification(leave_request):
-                        messages.warning(
-                            request, "Leave approved, but email notification failed."
-                        )
+                        messages.warning(request, "Leave approved, but email notification failed.")
                 except Exception as e:
                     import logging
 
@@ -2358,9 +2674,7 @@ def leave_requests(request):
                     from core.email_utils import send_leave_rejection_notification
 
                     if not send_leave_rejection_notification(leave_request):
-                        messages.warning(
-                            request, "Leave rejected, but email notification failed."
-                        )
+                        messages.warning(request, "Leave rejected, but email notification failed.")
                 except Exception as e:
                     import logging
 
@@ -2387,9 +2701,9 @@ def leave_requests(request):
 
     # Base query
 
-    leave_requests = LeaveRequest.objects.filter(
-        employee__company=request.user.company
-    ).select_related("employee__user", "employee__manager", "approved_by")
+    leave_requests = LeaveRequest.objects.filter(employee__company=request.user.company).select_related(
+        "employee__user", "employee__manager", "approved_by"
+    )
 
     # Apply filters
 
@@ -2404,20 +2718,14 @@ def leave_requests(request):
         )
 
     if department_filter:
-        leave_requests = leave_requests.filter(
-            employee__department__icontains=department_filter
-        )
+        leave_requests = leave_requests.filter(employee__department__icontains=department_filter)
 
     if leave_type_filter:
         leave_requests = leave_requests.filter(leave_type=leave_type_filter)
 
     # Get unique departments for filter dropdown
 
-    departments = (
-        Employee.objects.filter(company=request.user.company)
-        .values_list("department", flat=True)
-        .distinct()
-    )
+    departments = Employee.objects.filter(company=request.user.company).values_list("department", flat=True).distinct()
 
     return render(
         request,
@@ -2467,9 +2775,7 @@ def leave_history(request):
         else:
             employees = Employee.objects.none()
 
-        leave_history = LeaveRequest.objects.filter(
-            employee__in=employees
-        ).select_related(
+        leave_history = LeaveRequest.objects.filter(employee__in=employees).select_related(
             "employee__user",
             "employee__manager",
             "employee__leave_balance",
@@ -2479,9 +2785,7 @@ def leave_history(request):
     else:
         # Admin gets all
 
-        leave_history = LeaveRequest.objects.filter(
-            employee__company=request.user.company
-        ).select_related(
+        leave_history = LeaveRequest.objects.filter(employee__company=request.user.company).select_related(
             "employee__user",
             "employee__manager",
             "employee__leave_balance",
@@ -2498,9 +2802,7 @@ def leave_history(request):
         )
 
     if department_filter:
-        leave_history = leave_history.filter(
-            employee__department__icontains=department_filter
-        )
+        leave_history = leave_history.filter(employee__department__icontains=department_filter)
 
     if leave_type_filter:
         leave_history = leave_history.filter(leave_type=leave_type_filter)
@@ -2516,17 +2818,9 @@ def leave_history(request):
 
     # Get unique departments and years for filters
 
-    departments = (
-        Employee.objects.filter(company=request.user.company)
-        .values_list("department", flat=True)
-        .distinct()
-    )
+    departments = Employee.objects.filter(company=request.user.company).values_list("department", flat=True).distinct()
 
-    years = (
-        LeaveRequest.objects.filter(employee__company=request.user.company)
-        .dates("start_date", "year")
-        .distinct()
-    )
+    years = LeaveRequest.objects.filter(employee__company=request.user.company).dates("start_date", "year").distinct()
 
     return render(
         request,
@@ -2552,7 +2846,403 @@ def leave_history(request):
 @login_required
 @admin_required
 def payroll_dashboard(request):
-    return render(request, "core/stub.html", {"title": "Payroll Dashboard"})
+    """Admin Payroll Dashboard - Manage employee payslips"""
+    if not hasattr(request.user, "company") or not request.user.company:
+        messages.error(request, "Restricted access.")
+        return redirect("dashboard")
+
+    company = request.user.company
+    today = timezone.localtime().date()
+    
+    # Month/Year selection
+    selected_month = int(request.GET.get("month", today.month))
+    selected_year = int(request.GET.get("year", today.year))
+    
+    # Get all active employees
+    employees = Employee.objects.filter(company=company, is_active=True).select_related("user")
+    
+    # Get payslips for the selected month/year
+    # month_date is used for filtering. We use the first of the month.
+    month_filter = date(selected_year, selected_month, 1)
+    
+    existing_payslips = Payslip.objects.filter(
+        employee__company=company,
+        month__month=selected_month,
+        month__year=selected_year
+    )
+    
+    # Create a map for easy lookup
+    payslip_map = {slip.employee_id: slip for slip in existing_payslips}
+    
+    # Enhance employee list with payslip info
+    employee_data = []
+    for emp in employees:
+        employee_data.append({
+            "employee": emp,
+            "payslip": payslip_map.get(emp.id)
+        })
+    
+    months = []
+    for i in range(1, 13):
+        months.append({"value": i, "name": calendar.month_name[i]})
+        
+    years = range(today.year - 2, today.year + 2)
+
+    # Add days in month to context for default worked days
+    days_in_month = calendar.monthrange(selected_year, selected_month)[1]
+    
+    context = {
+        "title": "Payroll Dashboard",
+        "employee_data": employee_data,
+        "selected_month": selected_month,
+        "selected_year": selected_year,
+        "months": months,
+        "years": years,
+        "days_in_month": days_in_month,
+    }
+    
+    return render(request, "core/payroll_dashboard.html", context)
+
+@login_required
+@admin_required
+def upload_payslip(request):
+    """API or View to upload/generate a payslip for an employee"""
+    if request.method == "POST":
+        employee_id = request.POST.get("employee_id")
+        month = int(request.POST.get("month"))
+        year = int(request.POST.get("year"))
+        net_salary = request.POST.get("net_salary") or 0
+        annual_ctc = request.POST.get("annual_ctc")
+        uan = request.POST.get("uan")
+        pdf_file = request.FILES.get("pdf_file")
+        
+        try:
+            employee = Employee.objects.get(id=employee_id, company=request.user.company)
+            
+            # Reflect changes to employee finance profile
+            if annual_ctc:
+                employee.annual_ctc = float(annual_ctc)
+            if uan is not None:
+                employee.uan = uan
+            employee.save()
+            
+            month_date = date(year, month, 1)
+            
+            payslip, created = Payslip.objects.get_or_create(
+                employee=employee,
+                month=month_date,
+                defaults={"net_salary": net_salary}
+            )
+            
+            if not created:
+                payslip.net_salary = net_salary
+            
+            if pdf_file:
+                payslip.pdf_file = pdf_file
+            
+            payslip.save()
+            
+            messages.success(request, f"Payslip for {employee.user.get_full_name()} saved successfully.")
+        except Exception as e:
+            messages.error(request, f"Error saving payslip: {str(e)}")
+            
+    return redirect(f"{reverse('payroll_dashboard')}?month={request.POST.get('month')}&year={request.POST.get('year')}")
+
+@login_required
+@admin_required
+def calculate_generated_payslip(request):
+    """API to calculate payslip breakdown without saving"""
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            employee_id = data.get("employee_id")
+            annual_ctc = data.get("annual_ctc")
+            worked_days = data.get("worked_days")
+            month = int(data.get("month"))
+            year = int(data.get("year"))
+            
+            # Prioritize the pf_enabled flag from request if provided
+            pf_enabled = data.get("pf_enabled")
+            if pf_enabled is None:
+                if employee_id:
+                    employee = Employee.objects.get(id=employee_id, company=request.user.company)
+                    pf_enabled = employee.pf_enabled
+                else:
+                    pf_enabled = True
+            
+            # Days in month
+            total_days = calendar.monthrange(year, month)[1]
+            
+            # Get employee's location if available
+            location = None
+            if employee_id:
+                try:
+                    employee = Employee.objects.get(id=employee_id, company=request.user.company)
+                    location = employee.location
+                except Employee.DoesNotExist:
+                    pass
+
+            breakdown = calculate_payslip_breakdown(annual_ctc, worked_days, total_days, pf_enabled, location=location)
+            return JsonResponse({"status": "success", "breakdown": breakdown})
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+    return JsonResponse({"status": "error", "message": "Invalid method"}, status=405)
+
+@login_required
+@admin_required
+def process_payslip_generation(request):
+    """View to calculate, save and generate PDF payslip"""
+    if request.method == "POST":
+        employee_id = request.POST.get("employee_id")
+        annual_ctc = request.POST.get("annual_ctc")
+        worked_days = float(request.POST.get("worked_days") or 0)
+        month = int(request.POST.get("month"))
+        year = int(request.POST.get("year"))
+        
+        try:
+            employee = Employee.objects.get(id=employee_id, company=request.user.company)
+            
+            # Update employee's annual CTC if changed in the calculator
+            if annual_ctc:
+                new_ctc = float(str(annual_ctc).replace(",", ""))
+                if float(employee.annual_ctc or 0) != new_ctc:
+                    employee.annual_ctc = new_ctc
+                    employee.save()
+            
+            total_days = calendar.monthrange(year, month)[1]
+            month_date = date(year, month, 1)
+            
+            # Pass employee's PF status and location
+            breakdown = calculate_payslip_breakdown(annual_ctc, worked_days, total_days, employee.pf_enabled, location=employee.location)
+            
+            payslip, created = Payslip.objects.get_or_create(
+                employee=employee,
+                month=month_date
+            )
+            
+            # Update fields
+            payslip.basic = breakdown['basic']
+            payslip.hra = breakdown['hra']
+            payslip.lta = breakdown['lta']
+            payslip.other_allowance = breakdown['other_allowance']
+            # Map location specific allowances
+            payslip.conveyance_allowance = breakdown.get('conveyance', 0.0)
+            payslip.special_allowance = breakdown.get('medical', 0.0)
+            payslip.monthly_gross = breakdown['full_monthly_gross']
+            payslip.gross_salary = breakdown['gross_monthly']
+            payslip.employee_pf = breakdown['employee_pf']
+            payslip.employer_pf = breakdown['employer_pf']
+            payslip.professional_tax = breakdown['professional_tax']
+            payslip.net_salary = breakdown['net_salary']
+            payslip.worked_days = worked_days
+            payslip.total_days = total_days
+            payslip.save()
+            
+            # Generate PDF
+            # Determine currency name for words
+            currency_name = "Rupees"
+            if employee.location:
+                if employee.location.country_code == 'BD' or employee.location.currency == 'BDT':
+                    currency_name = "Taka"
+                elif employee.location.country_code == 'US' or employee.location.currency == 'USD':
+                    currency_name = "Dollars"
+                elif employee.location.currency:
+                    currency_name = employee.location.currency
+
+            # Prepare branding info
+            cname_upper = employee.company.name.upper()
+            branding = {
+                'name': 'PETABYTZ TECHNOLOGY SERVICES PVT LTD',
+                'address': 'PLOT NO 201 & 202, 1ST FLOOR, DMR CORPORATE, KAVURI HILLS RD, HYDERABAD, TELANGANA 500081.'
+            }
+            if "SOFTSTANDARD" in cname_upper or "RMINDS" in cname_upper:
+                branding['name'] = 'SOFTSTANDARD SOLUTIONS'
+            
+            # Use location address if available
+            if employee.location and employee.location.address_line1:
+                loc = employee.location
+                addr = f"{loc.address_line1}"
+                if loc.address_line2:
+                    addr += f", {loc.address_line2}"
+                addr += f", {loc.city}"
+                if loc.state:
+                    addr += f", {loc.state}"
+                if loc.postal_code:
+                    addr += f" {loc.postal_code}"
+                branding['address'] = addr
+
+            context = {
+                'payslip': payslip,
+                'company': employee.company,
+                'branding': branding,
+                'net_salary_words': num2words_flexible(payslip.net_salary, currency_name)
+            }
+            filename = f"payslip_{employee.badge_id}_{month_date.strftime('%b_%Y')}.pdf"
+            save_pdf_to_model(payslip, 'employees/payslip_pdf.html', context, filename)
+            
+            messages.success(request, f"Payslip for {employee.user.get_full_name()} generated successfully.")
+        except Exception as e:
+            messages.error(request, f"Error generating payslip: {str(e)}")
+            
+    return redirect(f"{reverse('payroll_dashboard')}?month={request.POST.get('month')}&year={request.POST.get('year')}")
+
+
+@login_required
+@admin_required
+def download_payslip_template(request):
+    """Download Excel template for bulk payslip upload"""
+    import openpyxl
+    from django.http import HttpResponse
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Payslip Template"
+    
+    headers = ["Employee ID", "Name", "Department", "Designation", "Monthly Gross", "Net Pay", "Payable Days"]
+    for col_num, header in enumerate(headers, 1):
+        ws.cell(row=1, column=col_num, value=header)
+        
+    # Add some sample data from active employees
+    employees = Employee.objects.filter(company=request.user.company, is_active=True).select_related('user')[:5]
+    for row_num, emp in enumerate(employees, 2):
+        ws.cell(row=row_num, column=1, value=emp.badge_id)
+        ws.cell(row=row_num, column=2, value=emp.user.get_full_name())
+        ws.cell(row=row_num, column=3, value=emp.department or "N/A")
+        ws.cell(row=row_num, column=4, value=emp.designation or "N/A")
+        ws.cell(row=row_num, column=5, value=float(emp.annual_ctc or 0) / 12)
+        # Net pay is not easily pre-calculated without knowing worked days
+        ws.cell(row=row_num, column=7, value=30) 
+        
+    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="Bulk_Payslip_Template.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+@admin_required
+def bulk_upload_payslips(request):
+    """Refined bulk upload from Excel"""
+    if request.method == "POST" and request.FILES.get("excel_file"):
+        import openpyxl
+        from datetime import date
+        
+        excel_file = request.FILES["excel_file"]
+        month = int(request.POST.get("month"))
+        year = int(request.POST.get("year"))
+        month_date = date(year, month, 1)
+        
+        try:
+            wb = openpyxl.load_workbook(excel_file)
+            ws = wb.active
+            
+            # Map headers to column indices
+            header_map = {}
+            for cell in ws[1]:
+                if cell.value:
+                    header_map[cell.value.strip().lower()] = cell.column - 1
+            
+            # Required columns
+            needed = ['employee id', 'monthly gross', 'payable days']
+            for col in needed:
+                if col not in header_map:
+                    messages.error(request, f"Required column missing: {col}")
+                    return redirect(f"{reverse('payroll_dashboard')}?month={month}&year={year}")
+            
+            success_count = 0
+            error_count = 0
+            
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                badge_id = str(row[header_map['employee id']]) if row[header_map['employee id']] else None
+                monthly_gross = row[header_map['monthly gross']]
+                payable_days = row[header_map['payable days']]
+                
+                if not badge_id or monthly_gross is None or payable_days is None:
+                    continue
+                
+                try:
+                    employee = Employee.objects.get(badge_id=badge_id, company=request.user.company)
+                    annual_ctc = float(monthly_gross) * 12
+                    worked_days = float(payable_days)
+                    total_days = calendar.monthrange(year, month)[1]
+                    
+                    # Calculate breakdown
+                    breakdown = calculate_payslip_breakdown(
+                        annual_ctc, worked_days, total_days, 
+                        employee.pf_enabled, location=employee.location
+                    )
+                    
+                    payslip, created = Payslip.objects.get_or_create(
+                        employee=employee,
+                        month=month_date
+                    )
+                    
+                    # Update fields
+                    payslip.basic = breakdown['basic']
+                    payslip.hra = breakdown['hra']
+                    payslip.lta = breakdown['lta']
+                    payslip.other_allowance = breakdown['other_allowance']
+                    payslip.conveyance_allowance = breakdown.get('conveyance', 0.0)
+                    payslip.special_allowance = breakdown.get('medical', 0.0)
+                    payslip.monthly_gross = breakdown['full_monthly_gross']
+                    payslip.gross_salary = breakdown['gross_monthly']
+                    payslip.employee_pf = breakdown['employee_pf']
+                    payslip.employer_pf = breakdown['employer_pf']
+                    payslip.professional_tax = breakdown['professional_tax']
+                    payslip.net_salary = breakdown['net_salary']
+                    payslip.worked_days = worked_days
+                    payslip.total_days = total_days
+                    payslip.save()
+                    
+                    # Generate PDF
+                    currency_name = "Rupees"
+                    if employee.location:
+                        if employee.location.country_code == 'BD' or employee.location.currency == 'BDT':
+                            currency_name = "Taka"
+                        elif employee.location.country_code == 'US' or employee.location.currency == 'USD':
+                            currency_name = "Dollars"
+                        elif employee.location.currency:
+                            currency_name = employee.location.currency
+
+                    cname_upper = employee.company.name.upper()
+                    branding = {
+                        'name': 'PETABYTZ TECHNOLOGY SERVICES PVT LTD',
+                        'address': 'PLOT NO 201 & 202, 1ST FLOOR, DMR CORPORATE, KAVURI HILLS RD, HYDERABAD, TELANGANA 500081.'
+                    }
+                    if "SOFTSTANDARD" in cname_upper or "RMINDS" in cname_upper:
+                        branding['name'] = 'SOFTSTANDARD SOLUTIONS'
+                    
+                    if employee.location and employee.location.address_line1:
+                        loc = employee.location
+                        addr = f"{loc.address_line1}"
+                        if loc.address_line2: addr += f", {loc.address_line2}"
+                        addr += f", {loc.city}"
+                        if loc.state: addr += f", {loc.state}"
+                        if loc.postal_code: addr += f" {loc.postal_code}"
+                        branding['address'] = addr
+
+                    context = {
+                        'payslip': payslip,
+                        'company': employee.company,
+                        'branding': branding,
+                        'net_salary_words': num2words_flexible(payslip.net_salary, currency_name)
+                    }
+                    filename = f"payslip_{employee.badge_id}_{month_date.strftime('%b_%Y')}.pdf"
+                    save_pdf_to_model(payslip, 'employees/payslip_pdf.html', context, filename)
+                    
+                    success_count += 1
+                except Employee.DoesNotExist:
+                    error_count += 1
+                except Exception as e:
+                    error_count += 1
+                    
+            messages.success(request, f"Successfully processed {success_count} payslips. {error_count} errors.")
+        except Exception as e:
+            messages.error(request, f"Error processing file: {str(e)}")
+            
+    return redirect(f"{reverse('payroll_dashboard')}?month={request.POST.get('month', date.today().month)}&year={request.POST.get('year', date.today().year)}")
+
+
 
 
 # --- Configuration Section ---
@@ -2568,8 +3258,9 @@ def holidays(request):
 
         return redirect("dashboard")
 
-    from companies.models import Location
     from datetime import datetime
+
+    from companies.models import Location
 
     # Handle POST requests (Add/Edit/Delete/Import)
 
@@ -2588,9 +3279,7 @@ def holidays(request):
                     created_by=request.user.get_full_name(),
                 )
 
-                messages.success(
-                    request, f"Holiday '{request.POST.get('name')}' added successfully!"
-                )
+                messages.success(request, f"Holiday '{request.POST.get('name')}' added successfully!")
 
             except Exception as e:
                 messages.error(request, f"Error adding holiday: {e}")
@@ -2599,15 +3288,11 @@ def holidays(request):
             try:
                 holiday_id = request.POST.get("holiday_id")
 
-                holiday = Holiday.objects.get(
-                    id=holiday_id, company=request.user.company
-                )
+                holiday = Holiday.objects.get(id=holiday_id, company=request.user.company)
 
                 holiday.name = request.POST.get("name")
 
-                holiday.date = datetime.strptime(
-                    request.POST.get("date"), "%Y-%m-%d"
-                ).date()
+                holiday.date = datetime.strptime(request.POST.get("date"), "%Y-%m-%d").date()
 
                 holiday.location = Location.objects.get(id=request.POST.get("location"))
 
@@ -2617,9 +3302,7 @@ def holidays(request):
 
                 holiday.save()
 
-                messages.success(
-                    request, f"Holiday '{holiday.name}' updated successfully!"
-                )
+                messages.success(request, f"Holiday '{holiday.name}' updated successfully!")
 
             except Holiday.DoesNotExist:
                 messages.error(request, "Holiday not found.")
@@ -2631,17 +3314,13 @@ def holidays(request):
             try:
                 holiday_id = request.POST.get("holiday_id")
 
-                holiday = Holiday.objects.get(
-                    id=holiday_id, company=request.user.company
-                )
+                holiday = Holiday.objects.get(id=holiday_id, company=request.user.company)
 
                 holiday_name = holiday.name
 
                 holiday.delete()
 
-                messages.success(
-                    request, f"Holiday '{holiday_name}' deleted successfully!"
-                )
+                messages.success(request, f"Holiday '{holiday_name}' deleted successfully!")
 
             except Holiday.DoesNotExist:
                 messages.error(request, "Holiday not found.")
@@ -2654,9 +3333,9 @@ def holidays(request):
 
             if "excel_file" in request.FILES:
                 try:
-                    import openpyxl
-
                     from datetime import datetime
+
+                    import openpyxl
 
                     file = request.FILES["excel_file"]
 
@@ -2674,9 +3353,7 @@ def holidays(request):
                                 holiday_date = (
                                     row[1]
                                     if isinstance(row[1], date)
-                                    else datetime.strptime(
-                                        str(row[1]), "%Y-%m-%d"
-                                    ).date()
+                                    else datetime.strptime(str(row[1]), "%Y-%m-%d").date()
                                 )
 
                                 Holiday.objects.create(
@@ -2687,9 +3364,7 @@ def holidays(request):
                                     if row[2]
                                     else Location.objects.get(name="Global"),
                                     holiday_type=row[3] if row[3] else "MANDATORY",
-                                    description=row[4]
-                                    if len(row) > 4 and row[4]
-                                    else "",
+                                    description=row[4] if len(row) > 4 and row[4] else "",
                                     created_by=request.user.get_full_name(),
                                 )
 
@@ -2698,9 +3373,7 @@ def holidays(request):
                             except Exception:
                                 continue
 
-                    messages.success(
-                        request, f"Successfully imported {imported_count} holidays!"
-                    )
+                    messages.success(request, f"Successfully imported {imported_count} holidays!")
 
                 except Exception as e:
                     messages.error(request, f"Error importing Excel file: {e}")
@@ -2736,10 +3409,7 @@ def holidays(request):
     # Get unique years for filter
 
     years = (
-        Holiday.objects.filter(company=request.user.company)
-        .values_list("year", flat=True)
-        .distinct()
-        .order_by("-year")
+        Holiday.objects.filter(company=request.user.company).values_list("year", flat=True).distinct().order_by("-year")
     )
 
     # Statistics
@@ -2783,8 +3453,7 @@ def download_holiday_template(request):
     """Download Excel template for holiday import"""
 
     import openpyxl
-
-    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.styles import Alignment, Font, PatternFill
 
     wb = openpyxl.Workbook()
 
@@ -2796,9 +3465,7 @@ def download_holiday_template(request):
 
     headers = ["Name", "Date (YYYY-MM-DD)", "Location", "Type", "Description"]
 
-    header_fill = PatternFill(
-        start_color="4472C4", end_color="4472C4", fill_type="solid"
-    )
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
 
     header_font = Font(bold=True, color="FFFFFF")
 
@@ -2828,13 +3495,9 @@ def download_holiday_template(request):
 
     ws.column_dimensions["E"].width = 40
 
-    response = HttpResponse(
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-    response["Content-Disposition"] = (
-        'attachment; filename="Holiday_Import_Template.xlsx"'
-    )
+    response["Content-Disposition"] = 'attachment; filename="Holiday_Import_Template.xlsx"'
 
     wb.save(response)
 
@@ -2850,8 +3513,7 @@ def export_holidays(request):
         return HttpResponse("Unauthorized", status=403)
 
     import openpyxl
-
-    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.styles import Alignment, Font, PatternFill
 
     year = request.GET.get("year", timezone.now().year)
 
@@ -2865,9 +3527,7 @@ def export_holidays(request):
 
     headers = ["Holiday Name", "Date", "Day", "Location", "Type", "Description"]
 
-    header_fill = PatternFill(
-        start_color="2c5282", end_color="2c5282", fill_type="solid"
-    )
+    header_fill = PatternFill(start_color="2c5282", end_color="2c5282", fill_type="solid")
 
     header_font = Font(bold=True, color="FFFFFF")
 
@@ -2882,9 +3542,7 @@ def export_holidays(request):
 
     # Data
 
-    holidays = Holiday.objects.filter(company=request.user.company, year=year).order_by(
-        "date"
-    )
+    holidays = Holiday.objects.filter(company=request.user.company, year=year).order_by("date")
 
     for row_num, holiday in enumerate(holidays, 2):
         ws.cell(row=row_num, column=1, value=holiday.name)
@@ -2915,9 +3573,7 @@ def export_holidays(request):
 
     filename = f"Holidays_{request.user.company.name}_{year}.xlsx"
 
-    response = HttpResponse(
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
@@ -2952,9 +3608,9 @@ def forgot_password_view(request):
             PasswordResetOTP.objects.create(user=user, otp=otp)
 
             # ALWAYS PRINT OTP FOR DEBUGGING/DEV
-            print("==========================================")
-            print(f"Generated OTP for {email}: {otp}")
-            print("==========================================")
+            # print("==========================================")
+            # print(f"Generated OTP for {email}: {otp}")
+            # print("==========================================")
 
             # Send Email
             try:
@@ -2964,28 +3620,22 @@ def forgot_password_view(request):
 
                 subject = "Password Reset OTP - Petabytz HRMS"
                 context = {"otp": otp}
-                html_content = render_to_string(
-                    "accounts/emails/password_reset_otp_email.html", context
-                )
+                html_content = render_to_string("accounts/emails/password_reset_otp_email.html", context)
                 text_content = strip_tags(html_content)
 
                 # Use EMAIL_HOST_USER as from_email for Microsoft 365 compatibility
                 from_email = settings.EMAIL_HOST_USER or settings.DEFAULT_FROM_EMAIL
 
-                email_msg = EmailMultiAlternatives(
-                    subject, text_content, from_email, [email]
-                )
+                email_msg = EmailMultiAlternatives(subject, text_content, from_email, [email])
                 email_msg.attach_alternative(html_content, "text/html")
                 email_msg.send(fail_silently=False)
 
-                messages.success(
-                    request, f"OTP sent to {email}. Please check your inbox."
-                )
+                messages.success(request, f"OTP sent to {email}. Please check your inbox.")
             except Exception as e:
                 import traceback
 
-                print(f"Error sending email: {e}")
-                print(traceback.format_exc())
+                logger.error(f"Error sending email: {e}")
+                logger.error(traceback.format_exc())
                 messages.error(request, f"Failed to send OTP email. Error: {str(e)}")
 
             request.session["reset_email"] = email
@@ -3053,3 +3703,99 @@ def reset_password_view(request):
         form = ResetPasswordForm()
 
     return render(request, "core/reset_password.html", {"form": form})
+
+
+# ==================== Notification Views ====================
+
+
+@login_required
+def get_notifications(request):
+    """
+    API endpoint to get notifications for the current user
+    """
+    from django.http import JsonResponse
+
+    from accounts.models import User
+
+    from .models import Notification
+
+    # Only allow managers, admins, and HR department users to see notifications
+    emp = getattr(request.user, "employee_profile", None)
+    is_hr = emp and str(getattr(emp, "department", "")).upper() == "HR"
+
+    if request.user.role not in [User.Role.COMPANY_ADMIN, User.Role.MANAGER] and not is_hr:
+        return JsonResponse({"notifications": [], "count": 0})
+
+    notifications = Notification.objects.filter(recipient=request.user).order_by("-created_at")[:20]
+
+    notifications_data = []
+    for notif in notifications:
+        notifications_data.append(
+            {
+                "id": notif.id,
+                "type": notif.notification_type,
+                "message": notif.message,
+                "is_read": notif.is_read,
+                "created_at": notif.created_at.isoformat(),
+                "url": get_notification_url(notif),
+            }
+        )
+
+    unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+
+    return JsonResponse({"notifications": notifications_data, "count": unread_count})
+
+
+@login_required
+def mark_notification_read(request, notification_id):
+    """
+    Mark a notification as read
+    """
+    from django.http import JsonResponse
+    from django.utils import timezone
+
+    from .models import Notification
+
+    try:
+        notification = Notification.objects.get(id=notification_id, recipient=request.user)
+        notification.is_read = True
+        notification.read_at = timezone.now()
+        notification.save()
+
+        unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+
+        return JsonResponse({"success": True, "unread_count": unread_count})
+    except Notification.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Notification not found"}, status=404)
+
+
+@login_required
+def mark_all_notifications_read(request):
+    """
+    Mark all notifications as read for the current user
+    """
+    from django.http import JsonResponse
+    from django.utils import timezone
+
+    from .models import Notification
+
+    if request.method == "POST":
+        Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True, read_at=timezone.now())
+
+        return JsonResponse({"success": True, "unread_count": 0})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"}, status=400)
+
+
+def get_notification_url(notification):
+    """
+    Helper function to get the URL for a notification based on its type
+    """
+    from django.urls import reverse
+
+    if notification.notification_type == "LEAVE_REQUEST":
+        return reverse("leave_requests")
+    elif notification.notification_type == "REGULARIZATION_REQUEST":
+        return reverse("regularization_list")
+
+    return "#"
